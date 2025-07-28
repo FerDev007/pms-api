@@ -3,7 +3,7 @@ from typing import Optional
 from datetime import datetime
 
 
-class SuministroRetrieve(BaseModel):
+class SuministroRead(BaseModel):
     id: int
     nombre: str
     sku: str
@@ -16,16 +16,21 @@ class SuministroRetrieve(BaseModel):
     impresora_id: int
 
 
-class ImpresoraRetrieve(BaseModel):
+class ImpresoraRead(BaseModel):
     id: int
     nombre: str
     nombre_para_mostrar: str
     picture_url: str
     cantidad_alquiladas: int
-    suministros: list[SuministroRetrieve] = []
+    suministros: list[SuministroRead] = []
 
 
-class TransaccionRetrieve(BaseModel):
+# Resolver referencias circulares
+ImpresoraRead.model_rebuild()
+SuministroRead.model_rebuild()
+
+
+class TransaccionRead(BaseModel):
     id: int
     suministro_id: int
     stock_antes: int
