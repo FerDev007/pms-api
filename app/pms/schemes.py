@@ -26,11 +26,6 @@ class ImpresoraRead(BaseModel):
     suministros: list[SuministroRead] = []
 
 
-# Resolver referencias circulares
-ImpresoraRead.model_rebuild()
-SuministroRead.model_rebuild()
-
-
 class TipoTransaccion(str, Enum):
     ENTRADA = "entrada"
     SALIDA = "salida"
@@ -40,7 +35,7 @@ class TipoTransaccion(str, Enum):
 
 class TransaccionRead(BaseModel):
     id: int
-    suministro_id: int
+    suministro: SuministroRead
     stock_antes: int
     cantidad_afectada: int
     stock_despues: int

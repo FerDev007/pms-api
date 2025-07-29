@@ -43,7 +43,12 @@ async def get_transaccion_by_id(
     return transaccion
 
 
-@transaccion_router.post("", response_model=TransaccionRead, tags=["transacciones"])
+@transaccion_router.post(
+    "",
+    response_model=TransaccionRead,
+    tags=["transacciones"],
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_transaccion(
     transaccion_data: TransaccionCreate, db: Session = Depends(get_db)
 ) -> TransaccionRead:
@@ -58,6 +63,7 @@ async def create_transaccion(
     "/{transaccion_id}/revertir",
     response_model=TransaccionRead,
     tags=["transacciones"],
+    status_code=status.HTTP_201_CREATED,
 )
 async def create_revert_transaccion(
     transaccion_id: int, db: Session = Depends(get_db)

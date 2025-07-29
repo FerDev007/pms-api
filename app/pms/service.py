@@ -1,5 +1,5 @@
 from fastapi import HTTPException, status
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, selectinload, joinedload
 from sqlalchemy import desc
 from typing import Optional
 from app.db.models import Impresora, Suministro, Transaccion
@@ -34,7 +34,12 @@ class SuministroService:
 
 class TransaccionService:
     def get_all_transacciones(self, db: Session) -> list[Transaccion]:
-        return db.query(Transaccion).order_by(desc(Transaccion.id)).all()
+        return (
+            db.query(Transaccion)
+            .options(joinedload(Transaccion.suministro))
+            .order_by(desc(Transaccion.id))
+            .all()
+        )
 
     def get_transaccion_by_id(
         self, transaccion_id: int, db: Session

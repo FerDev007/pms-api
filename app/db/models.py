@@ -42,6 +42,7 @@ class Transaccion(Base):
 
     id: int = Column(Integer, primary_key=True, index=True)
     suministro_id: int = Column(ForeignKey("pms_suministro.id"), nullable=False)
+    suministro = relationship(Suministro, backref="transacciones")
     stock_antes: int = Column(Integer, nullable=False)
     cantidad_afectada: int = Column(Integer, nullable=False)
     stock_despues: int = Column(Integer, nullable=False)
