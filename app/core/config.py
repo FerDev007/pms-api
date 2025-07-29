@@ -8,6 +8,12 @@ class Settings(BaseSettings):
     database_url: str
     is_debug: bool
     apks_folder: str
+    db_driver: str
+    db_server: str
+    db_port: int
+    db_database: str
+    db_uid: str
+    db_pwd: str
     model_config = SettingsConfigDict(
         env_file=".env",
         str_strip_whitespace=True,

@@ -1,0 +1,6 @@
+.venv/
+.vscode/
+.apks/
+.env
+seed.sql
+sql_install.sh
