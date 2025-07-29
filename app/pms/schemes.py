@@ -1,5 +1,6 @@
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, Field
+from typing import Optional, Literal
+from enum import Enum
 from datetime import datetime
 
 
@@ -30,12 +31,25 @@ ImpresoraRead.model_rebuild()
 SuministroRead.model_rebuild()
 
 
+class TipoTransaccion(str, Enum):
+    ENTRADA = "entrada"
+    SALIDA = "salida"
+    REVERSION_ENTRADA = "reversion_entrada"
+    REVERSION_SALIDA = "reversion_salida"
+
+
 class TransaccionRead(BaseModel):
     id: int
     suministro_id: int
     stock_antes: int
     cantidad_afectada: int
     stock_despues: int
-    tipo_transaccion: str
+    tipo_transaccion: TipoTransaccion
     fecha: datetime
     transaccion_revertida_id: Optional[int] = None
+
+
+class TransaccionCreate(BaseModel):
+    suministro_id: int = Field(..., gt=0)
+    cantidad_afectada: int = Field(..., gt=0, lt=10)
+    tipo_transaccion: Literal[TipoTransaccion.ENTRADA, TipoTransaccion.SALIDA]
