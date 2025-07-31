@@ -3,3 +3,5 @@ SQLAlchemy
 pydantic-settings
 alembic
 pyodbc
+beautifulsoup4
+pysnmp
