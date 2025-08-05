@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field
+from ipaddress import IPv4Address
 from typing import Optional, Literal
 from enum import Enum
 from datetime import datetime
@@ -26,6 +27,13 @@ class ImpresoraRead(BaseModel):
     suministros: list[SuministroRead] = []
 
 
+class ImpresoraReadSimple(BaseModel):
+    id: int
+    nombre: str
+    nombre_para_mostrar: str
+    picture_url: str
+
+
 class TipoTransaccion(str, Enum):
     ENTRADA = "entrada"
     SALIDA = "salida"
@@ -48,3 +56,11 @@ class TransaccionCreate(BaseModel):
     suministro_id: int = Field(..., gt=0)
     cantidad_afectada: int = Field(..., gt=0, lt=10)
     tipo_transaccion: Literal[TipoTransaccion.ENTRADA, TipoTransaccion.SALIDA]
+
+
+class ImpresoraEnSitioRead(BaseModel):
+    id: int
+    nombre: str
+    ip: IPv4Address
+    a_color: bool
+    impresora: ImpresoraReadSimple

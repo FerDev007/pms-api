@@ -1,7 +1,6 @@
-from sqlalchemy import String, Integer, Column, ForeignKey, DateTime
+from sqlalchemy import String, Integer, Column, ForeignKey, DateTime, Boolean
 from sqlalchemy.orm import relationship
-from typing import Annotated
-from datetime import datetime, timezone
+from datetime import datetime
 from sqlalchemy.sql import func
 from sqlalchemy.ext.declarative import declarative_base
 
@@ -17,7 +16,25 @@ class Impresora(Base):
     nombre_para_mostrar: str = Column(String(length=255), nullable=False, index=True)
     picture_url: str = Column(String(length=255), nullable=False)
     cantidad_alquiladas: int = Column(Integer, nullable=True)
-    suministros = relationship("Suministro", backref="impresora")
+
+    # Relaciones
+    suministros = relationship("Suministro")
+    impresoras_en_sitio = relationship("ImpresoraEnSitio")
+
+
+class ImpresoraEnSitio(Base):
+    __tablename__ = "pms_impresora_en_sitio"
+
+    id: int = Column(Integer, primary_key=True, index=True)
+    ip: str = Column(String(length=255), nullable=False, unique=True, index=True)
+    nombre: str = Column(String(255), nullable=False, unique=True)
+    a_color: bool = Column(Boolean, nullable=False, index=True)
+    impresora_id: int = Column(
+        ForeignKey("pms_impresora.id"),
+        nullable=False,
+        index=True,
+    )
+    impresora = relationship(Impresora, back_populates="impresoras_en_sitio")
 
 
 class Suministro(Base):
@@ -36,13 +53,16 @@ class Suministro(Base):
         ForeignKey("pms_impresora.id"), nullable=False, index=True
     )
 
+    # Relaciones
+    transacciones = relationship("Transaccion")
+    impresora = relationship("Impresora", back_populates="suministros")
+
 
 class Transaccion(Base):
     __tablename__ = "pms_transaccion"
 
     id: int = Column(Integer, primary_key=True, index=True)
     suministro_id: int = Column(ForeignKey("pms_suministro.id"), nullable=False)
-    suministro = relationship(Suministro, backref="transacciones")
     stock_antes: int = Column(Integer, nullable=False)
     cantidad_afectada: int = Column(Integer, nullable=False)
     stock_despues: int = Column(Integer, nullable=False)
@@ -51,3 +71,6 @@ class Transaccion(Base):
     transaccion_revertida_id: int = Column(
         ForeignKey("pms_transaccion.id"), nullable=True, index=True
     )
+
+    # Relaciones
+    suministro = relationship(Suministro, back_populates="transacciones")

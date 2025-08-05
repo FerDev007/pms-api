@@ -2,7 +2,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session, selectinload, joinedload
 from sqlalchemy import desc
 from typing import Optional
-from app.db.models import Impresora, Suministro, Transaccion
+from app.db.models import Impresora, Suministro, Transaccion, ImpresoraEnSitio
 from .schemes import TransaccionCreate, TipoTransaccion
 
 
@@ -17,6 +17,22 @@ class ImpresoraService:
             db.query(Impresora)
             .options(selectinload(Impresora.suministros))
             .filter(Impresora.id == impresora_id)
+            .first()
+        )
+
+    def get_all_impresoras_en_sitio(self, db: Session) -> list[ImpresoraEnSitio]:
+        return (
+            db.query(ImpresoraEnSitio)
+            .options(selectinload(ImpresoraEnSitio.impresora))
+            .all()
+        )
+
+    def get_impresora_en_sitio_by_id(
+        self, impresora_id: int, db: Session
+    ) -> Optional[ImpresoraEnSitio]:
+        return (
+            db.query(ImpresoraEnSitio)
+            .filter(ImpresoraEnSitio.id == impresora_id)
             .first()
         )
 

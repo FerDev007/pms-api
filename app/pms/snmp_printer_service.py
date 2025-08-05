@@ -12,6 +12,7 @@ class BandejaSMNP(BaseModel):
     uso_msg: str
 
 
+# Cyan", "Magenta", "Amarillo", "Negro"
 class SuministroSMNP(BaseModel):
     nombre: str
     color: Optional[str] = None
@@ -122,7 +123,7 @@ class SNMPService:
     ) -> str:
         """Execute snmpwalk and capture output"""
         try:
-            cmd = ["snmpwalk", "-v2c", "-c", "public", ip, oid]
+            cmd = ["snmpwalk", "-v2c", "-c", "public", "-t", "3", "-r", "0", ip, oid]
 
             # Run the command and capture output
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
@@ -319,6 +320,9 @@ class SNMPService:
 
     async def get_snmp_data(self, ip: str) -> SMNPData:
         nombre = await self.get_nombre_impresora(ip)
+        if not nombre:
+            raise Exception("SNMP error: Error de conexión")
+
         serie = await self.get_serie(ip)
         notificaciones = await self.get_notificaciones(ip)
         toners = await self.get_toners(ip)
@@ -431,14 +435,19 @@ class XeroxColorPrinterService(SNMPService):
         )
 
     async def get_snmp_data(self, ip: str) -> SMNPData:
-        serie = self.get_serie(ip)
-        notificaciones = await self.get_notificaciones(self.snmpEngine, ip)
-        bandejas = await self.get_bandejas(self.snmpEngine, ip)
-        toners = await self.get_toners(self.snmpEngine, ip)
-        cartucho = await self.get_cartucho(self.snmpEngine, ip)
-        consumos = await self.get_consumos(self.snmpEngine, ip)
+        nombre = await self.get_nombre_impresora(ip)
+        if not nombre:
+            raise Exception("SNMP error: Error de conexión")
+
+        serie = await self.get_serie(ip)
+        notificaciones = await self.get_notificaciones(ip)
+        bandejas = await self.get_bandejas(ip)
+        toners = await self.get_toners(ip)
+        cartucho = await self.get_cartucho(ip)
+        consumos = await self.get_consumo(ip)
 
         return SMNPData(
+            nombre=nombre,
             serie=serie,
             notificaciones=notificaciones,
             bandejas=bandejas,

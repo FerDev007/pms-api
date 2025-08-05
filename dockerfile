@@ -10,7 +10,9 @@ RUN apk add --no-cache \
     sudo \
     gpg \
     curl \
-    make
+    make \
+    net-snmp-tools
+
 
 # Set the working directory
 WORKDIR /app
