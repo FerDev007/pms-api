@@ -29,7 +29,6 @@ class SMNPData(BaseModel):
     nombre: str
     serie: str
     notificaciones: str
-    bandejas: list[BandejaSMNP]
     toners: list[SuministroSMNP]
     cartucho: SuministroSMNP
     consumo: ConsumoSMNP
@@ -327,14 +326,12 @@ class SNMPService:
         notificaciones = await self.get_notificaciones(ip)
         toners = await self.get_toners(ip)
         cartucho = await self.get_cartucho(ip)
-        bandejas = await self.get_bandejas(ip)
         consumo = await self.get_consumo(ip)
         return SMNPData(
             nombre=nombre,
             serie=serie,
             notificaciones=notificaciones,
             toners=toners,
-            bandejas=bandejas,
             cartucho=cartucho,
             consumo=consumo,
         )
@@ -441,7 +438,6 @@ class XeroxColorPrinterService(SNMPService):
 
         serie = await self.get_serie(ip)
         notificaciones = await self.get_notificaciones(ip)
-        bandejas = await self.get_bandejas(ip)
         toners = await self.get_toners(ip)
         cartucho = await self.get_cartucho(ip)
         consumos = await self.get_consumo(ip)
@@ -450,7 +446,6 @@ class XeroxColorPrinterService(SNMPService):
             nombre=nombre,
             serie=serie,
             notificaciones=notificaciones,
-            bandejas=bandejas,
             toners=toners,
             cartucho=cartucho,
             consumo=consumos,
