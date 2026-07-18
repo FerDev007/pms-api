@@ -1,27 +1,27 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import URL
+
 from app.core.config import settings
 
 
-database_url = URL.create(
-    drivername="mssql+pyodbc",
-    username=settings.db_uid,
-    password=settings.db_pwd,
-    host=f"{settings.db_server}",
-    port=f"{settings.db_port}",
-    database=settings.db_database,
-    query={
-        "driver": "ODBC Driver 18 for SQL Server",
-        "Encrypt": "yes",
-        "TrustServerCertificate": "yes",
-    },
+is_sqlite = settings.database_url.startswith("sqlite")
+engine = create_engine(
+    settings.database_url,
+    connect_args={"check_same_thread": False, "timeout": 30} if is_sqlite else {},
 )
 
-print()
 
-engine = create_engine(database_url)
-SessionLocal = sessionmaker(bind=engine)
+if is_sqlite:
+    @event.listens_for(engine, "connect")
+    def configure_sqlite(dbapi_connection, _connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=30000")
+        cursor.close()
+
+
+SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 
 def get_db():

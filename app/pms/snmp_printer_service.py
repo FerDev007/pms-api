@@ -30,7 +30,7 @@ class SMNPData(BaseModel):
     serie: str
     notificaciones: str
     toners: list[SuministroSMNP]
-    cartucho: SuministroSMNP
+    cartucho: Optional[SuministroSMNP] = None
     consumo: ConsumoSMNP
 
 
@@ -346,7 +346,7 @@ class XeroxColorPrinterService(SNMPService):
 
         toners_objs: list[SuministroSMNP] = []
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        url = "https://10.250.36.87/stat/welcome.php?tab=status"
+        url = f"https://{ip}/stat/welcome.php?tab=status"
         response = httpx.get(url, verify=False)
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, "html.parser")
@@ -372,7 +372,7 @@ class XeroxColorPrinterService(SNMPService):
             self.IMPRESIONES_TOTALES,
         )
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        url = "https://10.250.36.87/stat/welcome.php?tab=status"
+        url = f"https://{ip}/stat/welcome.php?tab=status"
         response = httpx.get(url, verify=False)
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, "html.parser")

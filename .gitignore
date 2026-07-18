@@ -109,3 +109,15 @@ venv.bak/
 .mypy_cache/
 
 .idea/*
+# React build
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+
+# Local PMS database
+pms.db
+pms.db-shm
+pms.db-wal
+.test_pms.db*
+.pytest_pms.db*
+pytest-cache-files-*/

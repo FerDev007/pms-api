@@ -4,3 +4,10 @@
 .env
 seed.sql
 sql_install.sh
+.git
+.env
+frontend/node_modules
+frontend/dist
+__pycache__
+.pytest_cache
+pms.db*

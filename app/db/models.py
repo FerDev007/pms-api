@@ -1,76 +1,121 @@
-from sqlalchemy import String, Integer, Column, ForeignKey, DateTime, Boolean
-from sqlalchemy.orm import relationship
-from datetime import datetime
-from sqlalchemy.sql import func
-from sqlalchemy.ext.declarative import declarative_base
+from datetime import datetime, timezone
+
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, JSON, String, Text, text
+from sqlalchemy.orm import declarative_base, relationship
 
 
 Base = declarative_base()
 
 
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class Usuario(Base):
+    __tablename__ = "pms_usuario"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(80), nullable=False, unique=True, index=True)
+    nombre = Column(String(160), nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    activo = Column(Boolean, nullable=False, default=True, index=True)
+    creado_en = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+    sesiones = relationship("Sesion", back_populates="usuario", cascade="all, delete-orphan")
+
+
+class Sesion(Base):
+    __tablename__ = "pms_sesion"
+
+    id = Column(Integer, primary_key=True)
+    token_hash = Column(String(64), nullable=False, unique=True, index=True)
+    usuario_id = Column(ForeignKey("pms_usuario.id", ondelete="CASCADE"), nullable=False, index=True)
+    expira_en = Column(DateTime(timezone=True), nullable=False, index=True)
+    creado_en = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+    usuario = relationship("Usuario", back_populates="sesiones")
+
+
 class Impresora(Base):
     __tablename__ = "pms_impresora"
 
-    id: int = Column(Integer, primary_key=True, index=True)
-    nombre: str = Column(String(length=255), nullable=False, index=True)
-    nombre_para_mostrar: str = Column(String(length=255), nullable=False, index=True)
-    picture_url: str = Column(String(length=255), nullable=False)
-    cantidad_alquiladas: int = Column(Integer, nullable=True)
+    id = Column(Integer, primary_key=True, index=True)
+    nombre = Column(String(255), nullable=False, index=True)
+    nombre_para_mostrar = Column(String(255), nullable=False, index=True)
+    picture_url = Column(String(500), nullable=False, default="")
+    cantidad_alquiladas = Column(Integer, nullable=False, default=0)
 
-    # Relaciones
-    suministros = relationship("Suministro")
-    impresoras_en_sitio = relationship("ImpresoraEnSitio")
+    suministros = relationship("Suministro", back_populates="impresora")
+    impresoras_en_sitio = relationship("ImpresoraEnSitio", back_populates="impresora")
 
 
 class ImpresoraEnSitio(Base):
     __tablename__ = "pms_impresora_en_sitio"
 
-    id: int = Column(Integer, primary_key=True, index=True)
-    ip: str = Column(String(length=255), nullable=False, unique=True, index=True)
-    nombre: str = Column(String(255), nullable=False, unique=True)
-    a_color: bool = Column(Boolean, nullable=False, index=True)
-    impresora_id: int = Column(
-        ForeignKey("pms_impresora.id"),
-        nullable=False,
-        index=True,
+    id = Column(Integer, primary_key=True, index=True)
+    ip = Column(String(255), nullable=False, unique=True, index=True)
+    nombre = Column(String(255), nullable=False, unique=True, index=True)
+    a_color = Column(Boolean, nullable=False, default=False, index=True)
+    impresora_id = Column(ForeignKey("pms_impresora.id"), nullable=False, index=True)
+
+    impresora = relationship("Impresora", back_populates="impresoras_en_sitio")
+    telemetria = relationship(
+        "TelemetriaImpresora", back_populates="impresora_en_sitio", uselist=False,
+        cascade="all, delete-orphan",
     )
-    impresora = relationship(Impresora, back_populates="impresoras_en_sitio")
 
 
 class Suministro(Base):
     __tablename__ = "pms_suministro"
 
-    id: int = Column(Integer, primary_key=True, index=True)
-    nombre: str = Column(String(length=255), nullable=False, index=True)
-    sku: str = Column(String(length=255), nullable=False, index=True)
-    upc: str = Column(String(length=255), nullable=False, index=True)
-    stock: int = Column(Integer, nullable=False, default=0)
-    tipo_suministro: str = Column(String(length=255), nullable=False, index=True)
-    capacidad_paginas: int = Column(Integer, nullable=False)
-    productos_compatibles: str = Column(String(length=255), nullable=False, index=True)
-    picture_url: str = Column(String(length=255), nullable=False)
-    impresora_id: int = Column(
-        ForeignKey("pms_impresora.id"), nullable=False, index=True
-    )
+    id = Column(Integer, primary_key=True, index=True)
+    nombre = Column(String(255), nullable=False, index=True)
+    sku = Column(String(255), nullable=False, unique=True, index=True)
+    upc = Column(String(255), nullable=False, unique=True, index=True)
+    stock = Column(Integer, nullable=False, default=0)
+    stock_minimo = Column(Integer, nullable=False, default=2, server_default=text("2"))
+    tipo_suministro = Column(String(255), nullable=False, index=True)
+    capacidad_paginas = Column(Integer, nullable=False)
+    productos_compatibles = Column(String(500), nullable=False, index=True)
+    picture_url = Column(String(500), nullable=False, default="")
+    impresora_id = Column(ForeignKey("pms_impresora.id"), nullable=False, index=True)
 
-    # Relaciones
-    transacciones = relationship("Transaccion")
+    transacciones = relationship("Transaccion", back_populates="suministro")
     impresora = relationship("Impresora", back_populates="suministros")
 
 
 class Transaccion(Base):
     __tablename__ = "pms_transaccion"
 
-    id: int = Column(Integer, primary_key=True, index=True)
-    suministro_id: int = Column(ForeignKey("pms_suministro.id"), nullable=False)
-    stock_antes: int = Column(Integer, nullable=False)
-    cantidad_afectada: int = Column(Integer, nullable=False)
-    stock_despues: int = Column(Integer, nullable=False)
-    tipo_transaccion: str = Column(String(length=255), nullable=False, index=True)
-    fecha: datetime = Column(DateTime, nullable=False, default=func.now())
-    transaccion_revertida_id: int = Column(
-        ForeignKey("pms_transaccion.id"), nullable=True, index=True
-    )
+    id = Column(Integer, primary_key=True, index=True)
+    suministro_id = Column(ForeignKey("pms_suministro.id"), nullable=False, index=True)
+    usuario_id = Column(ForeignKey("pms_usuario.id"), nullable=True, index=True)
+    stock_antes = Column(Integer, nullable=False)
+    cantidad_afectada = Column(Integer, nullable=False)
+    stock_despues = Column(Integer, nullable=False)
+    tipo_transaccion = Column(String(40), nullable=False, index=True)
+    fecha = Column(DateTime(timezone=True), nullable=False, default=utcnow, index=True)
+    transaccion_revertida_id = Column(ForeignKey("pms_transaccion.id"), nullable=True, index=True)
 
-    # Relaciones
-    suministro = relationship(Suministro, back_populates="transacciones")
+    suministro = relationship("Suministro", back_populates="transacciones")
+    usuario = relationship("Usuario")
+
+
+class TelemetriaImpresora(Base):
+    __tablename__ = "pms_telemetria_impresora"
+
+    id = Column(Integer, primary_key=True)
+    impresora_en_sitio_id = Column(
+        ForeignKey("pms_impresora_en_sitio.id", ondelete="CASCADE"), nullable=False, unique=True, index=True
+    )
+    observada_en = Column(DateTime(timezone=True), nullable=False, default=utcnow, index=True)
+    disponible = Column(Boolean, nullable=False, default=False, index=True)
+    error = Column(Text, nullable=True)
+    nombre_dispositivo = Column(String(255), nullable=True)
+    serie = Column(String(255), nullable=True)
+    notificaciones = Column(JSON, nullable=False, default=list)
+    toners = Column(JSON, nullable=False, default=list)
+    cartucho = Column(JSON, nullable=True)
+    consumo = Column(JSON, nullable=True)
+
+    impresora_en_sitio = relationship("ImpresoraEnSitio", back_populates="telemetria")

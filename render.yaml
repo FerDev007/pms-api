@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: pms
+    runtime: docker
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        value: sqlite:////var/data/pms.db
+      - key: IS_DEBUG
+        value: "false"
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: COLLECTOR_TOKEN
+        generateValue: true
+      - key: BOOTSTRAP_USERNAME
+        value: admin
+      - key: BOOTSTRAP_PASSWORD
+        sync: false
+    disk:
+      name: pms-data
+      mountPath: /var/data
+      sizeGB: 1

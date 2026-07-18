@@ -1,63 +1,37 @@
-FROM ubuntu:24.04
+FROM node:22-alpine AS frontend-build
 
-# Install Python and pip (uses Python 3.12 in Ubuntu 24.04)
-RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
-    python3-venv \
-    python3-dev \
-    && ln -s /usr/bin/python3 /usr/bin/python \
+WORKDIR /frontend
+COPY frontend/package*.json ./
+RUN npm ci --no-audit --no-fund
+COPY frontend/ ./
+RUN npm run build
+
+
+FROM python:3.13-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DATABASE_URL=sqlite:////var/data/pms.db \
+    FRONTEND_DIST=/app/frontend/dist
+
+RUN apt-get update && apt-get install -y --no-install-recommends snmp \
     && rm -rf /var/lib/apt/lists/*
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
-    libc6-dev \
-    unixodbc-dev \
-    libmariadb-dev \
-    sudo \
-    gpg \
-    curl \
-    make \
-    snmp \
-    && rm -rf /var/lib/apt/lists/*
-
-# Set the working directory
 WORKDIR /app
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Download SQL Server drivers (using your script)
-COPY install_sql_server18_ubuntu_driver.sh .
-# Make the script executable and run it
-RUN chmod +x install_sql_server18_ubuntu_driver.sh && ./install_sql_server18_ubuntu_driver.sh
+COPY alembic.ini VERSION seed.sql ./
+COPY migrations ./migrations
+COPY app ./app
+COPY --from=frontend-build /frontend/dist ./frontend/dist
 
-# Verify ODBC driver installation
-RUN odbcinst -q -d -n "ODBC Driver 18 for SQL Server" || echo "Driver not found in odbcinst"
-RUN ls -la /opt/microsoft/msodbcsql18/ || echo "msodbcsql18 directory not found"
+RUN mkdir -p /var/data /app/apks \
+    && groupadd --system app \
+    && useradd --system --gid app app \
+    && chown -R app:app /app /var/data
 
-# Add mssql-tools to PATH
-ENV PATH="$PATH:/opt/mssql-tools18/bin"
-
-# Copy the requirements file
-COPY requirements.txt .
-
-# Install Python dependencies using --break-system-packages
-RUN pip install --no-cache-dir --break-system-packages -r requirements.txt
-
-# Copy application files
-COPY . .
-
-# Create user and group
-RUN groupadd app && useradd -r -g app app
-
-# Set ownership to the app user of the working directory
-RUN chown -R app:app /app
-
-# Switch to the app user
 USER app
+EXPOSE 10000
 
-# Expose the port
-EXPOSE 8002
-
-# Entry point
-ENTRYPOINT ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8002"]
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-10000}"]
