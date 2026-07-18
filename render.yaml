@@ -1,10 +1,16 @@
 services:
   - type: web
     name: pms
-    runtime: docker
+    runtime: python
     plan: starter
+    buildCommand: pip install -r requirements.txt && cd frontend && npm ci --no-audit --no-fund && npm run build
+    startCommand: python -m alembic upgrade head && python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.5
+      - key: NODE_VERSION
+        value: 22.16.0
       - key: DATABASE_URL
         value: sqlite:////var/data/pms.db
       - key: IS_DEBUG
@@ -17,6 +23,8 @@ services:
         value: admin
       - key: BOOTSTRAP_PASSWORD
         sync: false
+      - key: APKS_FOLDER
+        value: /var/data/apks
     disk:
       name: pms-data
       mountPath: /var/data
