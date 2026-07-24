@@ -1,7 +1,17 @@
 """On-premise printer collector.
 
+Stays Python and stays on-prem: it talks SNMP over UDP to printers on the local
+network, which Supabase Edge Functions cannot reach. Only the base URL changed when
+the API moved -- the endpoints and the X-Collector-Token header are unchanged.
+
 Run once with:
-    python -m app.collector --base-url https://your-app.onrender.com --token SECRET --once
+    python -m app.collector \\
+        --base-url https://vhnlvowjqkolpbcbuylr.supabase.co/functions/v1 \\
+        --token $COLLECTOR_TOKEN --once
+
+Note the base URL stops at /functions/v1 -- the request paths below already start with
+/pms, which is the Edge Function's name. Including it in the base URL doubles it.
+The token must match the COLLECTOR_TOKEN secret set on the Edge Function.
 """
 
 import argparse

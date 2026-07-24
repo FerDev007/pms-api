@@ -1,18 +1,23 @@
 import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation } from '@tanstack/react-query'
 import { Eye, EyeOff } from 'lucide-react'
-import { api, json } from '@/lib/api'
-import type { User } from '@/lib/types'
+import { emailFor, supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Field } from '@/components/fields'
 
 export function LoginPage() {
-  const client = useQueryClient()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [show, setShow] = useState(false)
-  const login = useMutation({ mutationFn: () => api<User>('/pms/auth/login', json('POST', {username, password})), onSuccess: data => client.setQueryData(['me'], data) })
+  // Signing in updates the supabase session, which App.tsx is subscribed to -- no
+  // need to prime the query cache here.
+  const login = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.auth.signInWithPassword({ email: emailFor(username), password })
+      if (error) throw new Error('Usuario o contraseña incorrectos')
+    }
+  })
   return <main className="relative grid min-h-screen place-items-center overflow-hidden px-4 py-10">
     <div aria-hidden className="pointer-events-none absolute -right-24 -top-24 h-80 w-80 rounded-full bg-[#e9dcc2]/60 blur-3xl"/>
     <div aria-hidden className="pointer-events-none absolute -bottom-24 -left-24 h-80 w-80 rounded-full bg-[#dcd6c8]/60 blur-3xl"/>

@@ -1,9 +1,10 @@
-fastapi[standard]
-SQLAlchemy
-pydantic-settings
-alembic
-beautifulsoup4
+# Only the on-prem SNMP collector is still Python. The API runs as a Supabase Edge
+# Function (supabase/functions/pms) and the PWA is a static build.
+#
+# Every entry below is a direct import in app/collector.py or
+# app/pms/snmp_printer_service.py -- do not re-add FastAPI/SQLAlchemy here.
 pysnmp
 httpx
-argon2-cffi
-pytest
+beautifulsoup4
+urllib3
+pydantic

@@ -113,11 +113,14 @@ venv.bak/
 frontend/node_modules/
 frontend/dist/
 frontend/coverage/
+# tsc -b incremental state. Must never be committed: a stale one makes `tsc -b` skip
+# type-checking entirely on a clean CI build.
+frontend/*.tsbuildinfo
 
-# Local PMS database
-pms.db
-pms.db-shm
-pms.db-wal
-.test_pms.db*
-.pytest_pms.db*
-pytest-cache-files-*/
+# Supabase CLI local stack
+supabase/.temp/
+supabase/.branches/
+
+# Frontend env (frontend/.env.example is the committed template)
+frontend/.env
+frontend/.env.local

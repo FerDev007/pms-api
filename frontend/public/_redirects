@@ -1,0 +1,5 @@
+# Cloudflare Pages SPA fallback. Real files (assets, sw.js, manifest) are served first;
+# anything left over is a client-side route, so hand back index.html with a 200 rather
+# than a redirect. Without this, refreshing a deep link like /inventario/3 404s on the
+# first load -- before the service worker's navigateFallback is active.
+/*    /index.html   200

@@ -26,8 +26,7 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}']
       }
     })
-  ],
-  server: {
-    proxy: { '/pms': 'http://localhost:8000', '/health': 'http://localhost:8000' }
-  }
+  ]
+  // No dev proxy: the API is an absolute cross-origin URL (VITE_API_URL) in every
+  // environment now, and the Edge Function's CORS allowlist includes localhost:5173.
 })

@@ -1,10 +1,20 @@
+import { supabase } from './supabase'
+
+// The API is no longer same-origin, so requests carry a bearer token instead of a
+// cookie. getSession() refreshes an expired access token before handing it over.
+const BASE = import.meta.env.VITE_API_URL ?? ''
+
 export class ApiError extends Error { constructor(public status: number, message: string) { super(message) } }
 
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(path, {
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...options.headers },
-    ...options
+  const { data: { session } } = await supabase.auth.getSession()
+  const response = await fetch(`${BASE}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
+      ...options.headers
+    }
   })
   if (response.status === 204) return undefined as T
   const data = await response.json().catch(() => ({}))

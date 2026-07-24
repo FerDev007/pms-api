@@ -1,8 +1,10 @@
-import { lazy, Suspense } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { lazy, Suspense, useEffect, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { Toaster } from 'sonner'
+import type { Session } from '@supabase/supabase-js'
 import { api } from '@/lib/api'
+import { supabase } from '@/lib/supabase'
 import type { User } from '@/lib/types'
 import { Loading } from '@/components/common'
 import { AppLayout } from '@/components/layout'
@@ -23,9 +25,24 @@ const AccountPage = lazy(() => import('@/pages/More').then(m => ({default:m.Acco
 const DownloadsPage = lazy(() => import('@/pages/More').then(m => ({default:m.DownloadsPage})))
 
 export default function App() {
-  const me = useQuery({ queryKey: ['me'], queryFn: () => api<User>('/pms/auth/me'), retry: false })
-  if (me.isLoading) return <Loading label="Preparando PMS"/>
-  if (!me.data) return <><LoginPage/><Toaster position="top-center" richColors/></>
+  const client = useQueryClient()
+  // undefined = still resolving the stored session, null = signed out.
+  const [session, setSession] = useState<Session | null | undefined>(undefined)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session))
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, next) => {
+      setSession(next)
+      if (!next) client.clear()
+    })
+    return () => listener.subscription.unsubscribe()
+  }, [client])
+
+  // The profile still comes from the API: it carries `nombre`/`activo`, and a 401 here
+  // is what surfaces an account deactivated after its token was issued.
+  const me = useQuery({ queryKey: ['me'], queryFn: () => api<User>('/pms/auth/me'), retry: false, enabled: !!session })
+  if (session === undefined || (session && me.isPending)) return <Loading label="Preparando PMS"/>
+  if (!session || !me.data) return <><LoginPage/><Toaster position="top-center" richColors/></>
   return <>
     <Suspense fallback={<Loading label="Abriendo vista"/>}><Routes>
       <Route element={<AppLayout user={me.data}/>}>
