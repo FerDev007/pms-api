@@ -11,6 +11,7 @@
 import { Hono } from 'hono'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import {
+  etiquetaCampo,
   impresoraEnSitioWrite, impresoraWrite, listaSimple, listaSuministros, listaTransacciones,
   passwordChange, suministroWrite, telemetriaBatch, transaccionCreate, usuarioCreate, usuarioUpdate,
 } from './schemas.ts'
@@ -61,17 +62,46 @@ type Usuario = { id: number; username: string; nombre: string; activo: boolean; 
 
 // ---------------------------------------------------------------- helpers
 
-/** Unwrap a PostgREST result, translating database errors into HTTP ones. */
+/**
+ * Unwrap a PostgREST result, translating database errors into HTTP ones.
+ *
+ * Raw Postgres text is never forwarded to the user: it is English and it leaks column
+ * and constraint names. Anything unrecognised is logged and reported generically.
+ */
 function unwrap<T>(res: { data: T | null; error: { code?: string; message: string } | null }, conflict?: string): T {
   if (res.error) {
     const code = res.error.code ?? ''
-    // The PTxxx SQLSTATEs raised by crear_transaccion / revertir_transaccion.
+    // The PTxxx SQLSTATEs raised by crear_transaccion / revertir_transaccion carry
+    // messages this codebase wrote, in Spanish, so they pass through verbatim.
     if (/^PT\d{3}$/.test(code)) throw new ApiError(Number(code.slice(2)), res.error.message)
-    if (code === '23505' && conflict) throw new ApiError(409, conflict)
-    if (code === '23503' && conflict) throw new ApiError(409, conflict)
-    throw new ApiError(500, res.error.message)
+    if (code === '23505') throw new ApiError(409, conflict ?? 'Ya existe un registro con esos datos')
+    if (code === '23503') throw new ApiError(409, conflict ?? 'No se puede completar: el registro está relacionado con otros datos')
+    if (code === '23514') throw new ApiError(400, 'Alguno de los datos no cumple las reglas del sistema')
+    if (code === '22P02') throw new ApiError(400, 'Alguno de los datos tiene un formato incorrecto')
+    console.error('postgrest', code, res.error.message)
+    throw new ApiError(500, 'No se pudo completar la operación. Inténtalo de nuevo.')
   }
   return res.data as T
+}
+
+/** Supabase Auth replies in English; map the cases a user can actually cause. */
+function mensajeAuth(error: { message: string }, respaldo: string): string {
+  const m = error.message.toLowerCase()
+  if (m.includes('should be at least') || m.includes('password should be')) {
+    return 'La contraseña debe tener al menos 8 caracteres'
+  }
+  if (m.includes('different from the old')) return 'La contraseña nueva debe ser distinta de la actual'
+  if (m.includes('weak') || m.includes('pwned') || m.includes('compromised')) {
+    return 'Esa contraseña es demasiado común. Elige una más segura.'
+  }
+  if (m.includes('already registered') || m.includes('already been registered')) {
+    return 'El nombre de usuario ya existe'
+  }
+  if (m.includes('rate limit') || m.includes('too many')) {
+    return 'Demasiados intentos. Espera un momento e inténtalo de nuevo.'
+  }
+  console.error('auth', error.message)
+  return respaldo
 }
 
 const page = <T>(items: T[], total: number, current: number, size: number) => ({
@@ -127,9 +157,14 @@ async function getSite(id: number) {
 
 async function readBody<T>(c: any, schema: { safeParse: (v: unknown) => any }): Promise<T> {
   const raw = await c.req.json().catch(() => null)
+  if (raw === null) throw new ApiError(422, 'No recibimos los datos del formulario. Inténtalo de nuevo.')
   const parsed = schema.safeParse(raw)
   if (!parsed.success) {
-    const detail = parsed.error.issues.map((i: any) => `${i.path.join('.') || 'cuerpo'}: ${i.message}`).join('. ')
+    // "Stock mínimo: debe ser 0 o más" reads like a form hint; the raw zod path and
+    // English default did not.
+    const detail = parsed.error.issues
+      .map((i: any) => `${etiquetaCampo(i.path)}: ${i.message.charAt(0).toLowerCase()}${i.message.slice(1)}`)
+      .join('. ')
     throw new ApiError(422, detail)
   }
   return parsed.data as T
@@ -137,7 +172,7 @@ async function readBody<T>(c: any, schema: { safeParse: (v: unknown) => any }): 
 
 function readQuery<T>(c: any, schema: { safeParse: (v: unknown) => any }): T {
   const parsed = schema.safeParse(Object.fromEntries(new URL(c.req.url).searchParams))
-  if (!parsed.success) throw new ApiError(422, 'Parámetros de búsqueda inválidos')
+  if (!parsed.success) throw new ApiError(422, 'Los filtros de búsqueda no son válidos')
   return parsed.data as T
 }
 
@@ -182,7 +217,7 @@ app.use('*', async (c, next) => {
 app.onError((err, c) => {
   if (err instanceof ApiError) return c.json({ detail: err.message }, err.status as any)
   console.error('unhandled', err)
-  return c.json({ detail: 'Error interno del servidor' }, 500)
+  return c.json({ detail: 'Ocurrió un error inesperado. Inténtalo de nuevo en un momento.' }, 500)
 })
 
 // --- auth lanes -------------------------------------------------
@@ -203,7 +238,7 @@ async function currentUser(c: any): Promise<Usuario> {
   const { data, error } = await scoped.rpc('pms_usuario_actual')
   // A composite return type yields a row of nulls (not zero rows) when auth.uid()
   // matches nothing, so the id has to be checked explicitly.
-  if (error || !data || data.id === null) throw new ApiError(401, 'La sesión venció')
+  if (error || !data || data.id === null) throw new ApiError(401, 'Tu sesión expiró. Ingresa de nuevo.')
   return data as Usuario
 }
 
@@ -239,7 +274,7 @@ app.post('/auth/change-password', async (c) => {
   })
   if (error) throw new ApiError(400, 'La contraseña actual no coincide')
   const updated = await db.auth.admin.updateUserById(usuario.auth_user_id, { password: data.password_nuevo })
-  if (updated.error) throw new ApiError(400, updated.error.message)
+  if (updated.error) throw new ApiError(400, mensajeAuth(updated.error, 'No se pudo cambiar la contraseña'))
   return c.body(null, 204)
 })
 
@@ -299,7 +334,7 @@ app.delete('/impresoras/:id', async (c) => {
   const supplies = unwrap(await db.from('pms_suministro').select('id').eq('impresora_id', id).limit(1))
   const sites = unwrap(await db.from('pms_impresora_en_sitio').select('id').eq('impresora_id', id).limit(1))
   if ((supplies as any[]).length || (sites as any[]).length) {
-    throw new ApiError(409, 'La impresora tiene suministros o equipos asociados')
+    throw new ApiError(409, 'No puedes eliminar este modelo porque tiene suministros o equipos asociados')
   }
   unwrap(await db.from('pms_impresora').delete().eq('id', id).select('id'))
   return c.body(null, 204)
@@ -348,7 +383,7 @@ app.delete('/suministros/:id', async (c) => {
   const id = Number(c.req.param('id'))
   await getSupply(id)
   const movements = unwrap(await db.from('pms_transaccion').select('id').eq('suministro_id', id).limit(1))
-  if ((movements as any[]).length) throw new ApiError(409, 'El suministro tiene movimientos asociados')
+  if ((movements as any[]).length) throw new ApiError(409, 'No puedes eliminar este suministro porque ya tiene movimientos registrados')
   unwrap(await db.from('pms_suministro').delete().eq('id', id).select('id'))
   return c.body(null, 204)
 })
@@ -509,7 +544,7 @@ app.patch('/usuarios/:id', async (c) => {
   }
   if (data.password !== undefined && user.auth_user_id) {
     const updated = await db.auth.admin.updateUserById(user.auth_user_id, { password: data.password })
-    if (updated.error) throw new ApiError(400, updated.error.message)
+    if (updated.error) throw new ApiError(400, mensajeAuth(updated.error, 'No se pudo actualizar la contraseña'))
   }
 
   if (Object.keys(patch).length === 0) return c.json(unwrap(await db.from('pms_usuario').select(USUARIO_COLS).eq('id', id).single()))
@@ -521,7 +556,10 @@ app.patch('/usuarios/:id', async (c) => {
 /** Mirrors latest_apk() in api.py: highest trailing _<n>, else most recently modified. */
 async function latestApk() {
   const { data, error } = await db.storage.from('apks').list('', { limit: 1000 })
-  if (error) throw new ApiError(500, error.message)
+  if (error) {
+    console.error('storage.list', error.message)
+    throw new ApiError(500, 'No pudimos consultar la aplicación Android. Inténtalo más tarde.')
+  }
   const apks = (data ?? []).filter((f) => f.name.toLowerCase().endsWith('.apk'))
   if (!apks.length) throw new ApiError(404, 'No hay una aplicación Android disponible')
   const versioned = apks
@@ -543,7 +581,10 @@ app.get('/apks/latest_version', async (c) => {
 app.get('/apks/download_apk', async (c) => {
   const { file } = await latestApk()
   const { data, error } = await db.storage.from('apks').createSignedUrl(file.name, 300, { download: true })
-  if (error || !data) throw new ApiError(500, error?.message ?? 'No se pudo generar la descarga')
+  if (error || !data) {
+    console.error('storage.signedUrl', error?.message)
+    throw new ApiError(500, 'No pudimos preparar la descarga. Inténtalo de nuevo.')
+  }
   return c.json({ url: data.signedUrl, filename: file.name })
 })
 

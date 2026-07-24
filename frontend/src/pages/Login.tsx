@@ -15,7 +15,20 @@ export function LoginPage() {
   const login = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.auth.signInWithPassword({ email: emailFor(username), password })
-      if (error) throw new Error('Usuario o contraseña incorrectos')
+      if (!error) return
+      // Distinguish "wrong password" from "could not reach the server". Showing the
+      // credentials message for a network failure sends people to reset a password
+      // that was never wrong.
+      if (error.status === 400 || /invalid login|credentials/i.test(error.message)) {
+        throw new Error('Usuario o contraseña incorrectos')
+      }
+      if (error.status === 429 || /rate limit|too many/i.test(error.message)) {
+        throw new Error('Demasiados intentos. Espera un momento e inténtalo de nuevo.')
+      }
+      if (!error.status || error.status >= 500) {
+        throw new Error('No pudimos conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.')
+      }
+      throw new Error('No pudimos iniciar sesión. Inténtalo de nuevo.')
     }
   })
   return <main className="relative grid min-h-screen place-items-center overflow-hidden px-4 py-10">
