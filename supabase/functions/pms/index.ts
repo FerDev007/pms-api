@@ -24,10 +24,21 @@ const EMAIL_DOMAIN = Deno.env.get('PMS_EMAIL_DOMAIN') ?? 'pms.local'
 // An origin allowlist is public information, so the deployed frontend is the default
 // rather than something you must remember to set as a secret. ALLOWED_ORIGINS still
 // overrides it -- set that when adding a custom domain.
-// Note Cloudflare's per-deployment preview URLs (<hash>.pms-8pn.pages.dev) are
-// deliberately NOT covered: only the stable production alias is trusted.
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? 'https://pms-8pn.pages.dev,http://localhost:5173')
   .split(',').map((o) => o.trim()).filter(Boolean)
+
+// Cloudflare also gives every single deployment its own <hash>.<project>.pages.dev
+// URL, and the dashboard links to THAT rather than to the production alias -- so the
+// URL people actually click is not the one in the list above. Those hostnames can
+// only be produced by this project, so trusting the suffix is safe.
+// The leading dot matters: it stops "evilpms-8pn.pages.dev" from matching.
+const ORIGIN_SUFFIX = Deno.env.get('ALLOWED_ORIGIN_SUFFIX') ?? '.pms-8pn.pages.dev'
+
+function originAllowed(origin: string): boolean {
+  if (!origin) return false
+  if (ALLOWED_ORIGINS.includes(origin)) return true
+  return ORIGIN_SUFFIX !== '' && origin.startsWith('https://') && origin.endsWith(ORIGIN_SUFFIX)
+}
 
 // service_role bypasses the deny-all RLS on every pms_* table.
 const db: SupabaseClient = createClient(SUPABASE_URL, SERVICE_KEY, {
@@ -148,7 +159,7 @@ const app = new Hono().basePath('/pms')
 
 app.use('*', async (c, next) => {
   const origin = c.req.header('Origin') ?? ''
-  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ''
+  const allowed = originAllowed(origin) ? origin : ''
   if (c.req.method === 'OPTIONS') {
     return new Response(null, {
       status: 204,
