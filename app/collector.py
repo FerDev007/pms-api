@@ -76,6 +76,17 @@ def log(mensaje: str) -> None:
     print(f"[{hora}] {mensaje}", flush=True)
 
 
+def pausa_si_interactivo() -> None:
+    """Si se abrió con doble clic (consola interactiva), espera un Enter para que se
+    alcance a leer el mensaje antes de que la ventana se cierre. Bajo el Programador
+    de tareas no hay consola interactiva, así que no se queda colgado."""
+    try:
+        if sys.stdin and sys.stdin.isatty():
+            input("\nPresiona Enter para cerrar...")
+    except Exception:
+        pass
+
+
 def cargar_config() -> None:
     """Carga un archivo `pms-collector.config` (líneas CLAVE=valor) que esté junto al
     ejecutable. Así el .exe empaquetado se configura sin poner el token en la tarea de
@@ -102,9 +113,15 @@ async def main() -> None:
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args()
     if not args.base_url or not args.token:
-        parser.error(
-            "Faltan --base-url y --token (o PMS_BASE_URL / PMS_COLLECTOR_TOKEN en pms-collector.config)"
+        log(
+            "Falta configuración. Este programa necesita un archivo 'pms-collector.config'\n"
+            "en la MISMA carpeta que el .exe, con este contenido:\n\n"
+            "  PMS_BASE_URL=https://vhnlvowjqkolpbcbuylr.supabase.co/functions/v1\n"
+            "  PMS_COLLECTOR_TOKEN=tu-token-de-colector\n"
+            "  PMS_INTERVAL=300\n"
         )
+        pausa_si_interactivo()
+        sys.exit(1)
     while True:
         # Running as a service means "forget about it": a transient network or API
         # error must not kill the loop. Catch per cycle, log it, and try again next
