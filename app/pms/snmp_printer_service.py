@@ -1,4 +1,4 @@
-import asyncio, subprocess, re, httpx
+import asyncio, httpx
 from bs4 import BeautifulSoup
 import urllib3
 from pysnmp.hlapi.v3arch.asyncio import *
@@ -97,51 +97,60 @@ class SNMPService:
         except (ValueError, TypeError):
             return None
 
-    async def query_oid(self, snmpEngine: SnmpEngine, ip: str, oid) -> Optional[str]:
-        """Query a single OID and return the value"""
+    def _norm(self, oid) -> str:
+        """pysnmp no acepta OIDs con punto inicial (algunos constantes lo traen)."""
+        return str(oid).lstrip(".")
+
+    def _render(self, value) -> str:
+        """Convierte un valor SNMP a texto legible, decodificando hex si hace falta."""
+        if value is None:
+            return ""
         try:
-            iterator = get_cmd(
+            texto = value.prettyPrint()
+        except Exception:
+            texto = str(value)
+        return self.decode_hex(texto)
+
+    async def query_oid(self, snmpEngine: SnmpEngine, ip: str, oid) -> Optional[str]:
+        """Consulta un OID puntual (GET) y devuelve el valor, o None."""
+        try:
+            errorIndication, errorStatus, errorIndex, varBinds = await get_cmd(
                 snmpEngine,
                 CommunityData("public", mpModel=0),
-                await UdpTransportTarget.create((ip, 161)),
+                await UdpTransportTarget.create((ip, 161), timeout=3, retries=0),
                 ContextData(),
-                ObjectType(ObjectIdentity(oid)),
+                ObjectType(ObjectIdentity(self._norm(oid))),
             )
-            errorIndication, errorStatus, errorIndex, varBinds = await iterator
-
             if errorIndication or errorStatus:
                 return None
             return varBinds[0][1] if varBinds else None
-        except:
+        except Exception:
             return None
 
-    async def snmp_walk(
-        self,
-        ip: str,
-        oid: str,
-    ) -> str:
-        """Execute snmpwalk and capture output"""
+    async def snmp_walk(self, ip: str, oid: str) -> str:
+        """Recorre un subárbol OID con pysnmp (Python puro) en vez del binario
+        externo `snmpwalk`, para poder empaquetar el colector en un solo .exe.
+        Devuelve los valores unidos con '|', como antes."""
+        valores: list[str] = []
         try:
-            cmd = ["snmpwalk", "-v2c", "-c", "public", "-t", "3", "-r", "0", ip, oid]
-
-            # Run the command and capture output
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-
-            if result.returncode == 0:
-                raw_result = result.stdout
-                matches = re.findall(r'"(.*?)"', raw_result)
-                result = "|".join(matches)
-                return result
-            else:
-                print(f"SNMP error: {result.stderr}")
-                return ""
-
-        except subprocess.TimeoutExpired:
-            print("SNMP command timed out")
-            return ""
+            objetos = walk_cmd(
+                self.snmpEngine,
+                CommunityData("public", mpModel=0),
+                await UdpTransportTarget.create((ip, 161), timeout=3, retries=0),
+                ContextData(),
+                ObjectType(ObjectIdentity(self._norm(oid))),
+                lexicographicMode=False,  # no salirse del subárbol pedido
+            )
+            async for errorIndication, errorStatus, errorIndex, varBinds in objetos:
+                if errorIndication or errorStatus:
+                    break
+                for _nombre, valor in varBinds:
+                    texto = self._render(valor)
+                    if texto:
+                        valores.append(texto)
         except Exception as e:
-            print(f"Error running snmpwalk: {e}")
-            return ""
+            print(f"Error en snmp_walk({oid}): {e}", flush=True)
+        return "|".join(valores)
 
     def decode_hex(self, value) -> str:
         """Decode hex string to readable text"""
@@ -168,22 +177,16 @@ class SNMPService:
         return result
 
     async def get_nombre_impresora(self, ip: str) -> str:
-        nombre = await self.snmp_walk(ip=ip, oid=self.NOMBRE_IMPRESORA)
-        return nombre
+        # Instancia exacta (sysName.0) -> GET, no walk. Con net-snmp, snmpwalk sobre
+        # una instancia exacta devolvía el objeto siguiente, no este.
+        return self._render(await self.query_oid(self.snmpEngine, ip, self.NOMBRE_IMPRESORA))
 
     async def get_serie(self, ip: str) -> str:
-        serie = await self.snmp_walk(ip=ip, oid=self.NUMERO_SERIAL)
-        return serie
+        return self._render(await self.query_oid(self.snmpEngine, ip, self.NUMERO_SERIAL))
 
-    async def get_notificaciones(self, ip: str) -> list[str]:
-        notificaciones = await self.snmp_walk(ip=ip, oid=self.NOTIFICACIONES)
-
-        if notificaciones and notificaciones != "":
-            notificaciones = self.decode_hex(notificaciones)
-        else:
-            notificaciones = "No hay notificaciones."
-
-        return notificaciones
+    async def get_notificaciones(self, ip: str) -> str:
+        texto = self._render(await self.query_oid(self.snmpEngine, ip, self.NOTIFICACIONES))
+        return texto if texto else "No hay notificaciones."
 
     async def get_bandejas(
         self,

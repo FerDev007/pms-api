@@ -1,0 +1,7 @@
+# Configuración del colector empaquetado.
+# Copia este archivo como "pms-collector.config" y ponlo JUNTO al pms-collector.exe.
+# El exe lo lee al arrancar; así el token no queda en la tarea de Windows.
+
+PMS_BASE_URL=https://vhnlvowjqkolpbcbuylr.supabase.co/functions/v1
+PMS_COLLECTOR_TOKEN=PON-AQUI-EL-MISMO-TOKEN-DE-LA-FUNCION
+PMS_INTERVAL=300

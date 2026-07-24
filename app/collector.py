@@ -16,6 +16,8 @@ The token must match the COLLECTOR_TOKEN secret set on the Edge Function.
 
 import argparse
 import asyncio
+import os
+import sys
 from datetime import datetime, timezone
 
 import httpx
@@ -74,13 +76,35 @@ def log(mensaje: str) -> None:
     print(f"[{hora}] {mensaje}", flush=True)
 
 
+def cargar_config() -> None:
+    """Carga un archivo `pms-collector.config` (líneas CLAVE=valor) que esté junto al
+    ejecutable. Así el .exe empaquetado se configura sin poner el token en la tarea de
+    Windows ni en argumentos visibles."""
+    base = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.getcwd()
+    ruta = os.path.join(base, "pms-collector.config")
+    if not os.path.exists(ruta):
+        return
+    for linea in open(ruta, encoding="utf-8"):
+        linea = linea.strip()
+        if not linea or linea.startswith("#") or "=" not in linea:
+            continue
+        clave, _, valor = linea.partition("=")
+        os.environ.setdefault(clave.strip(), valor.strip())
+
+
 async def main() -> None:
+    cargar_config()
     parser = argparse.ArgumentParser(description="Colector local de telemetría PMS")
-    parser.add_argument("--base-url", required=True)
-    parser.add_argument("--token", required=True)
-    parser.add_argument("--interval", type=int, default=300)
+    # Los argumentos ganan; si faltan, se toman del archivo de config / variables de entorno.
+    parser.add_argument("--base-url", default=os.environ.get("PMS_BASE_URL"))
+    parser.add_argument("--token", default=os.environ.get("PMS_COLLECTOR_TOKEN"))
+    parser.add_argument("--interval", type=int, default=int(os.environ.get("PMS_INTERVAL", "300")))
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args()
+    if not args.base_url or not args.token:
+        parser.error(
+            "Faltan --base-url y --token (o PMS_BASE_URL / PMS_COLLECTOR_TOKEN en pms-collector.config)"
+        )
     while True:
         # Running as a service means "forget about it": a transient network or API
         # error must not kill the loop. Catch per cycle, log it, and try again next
