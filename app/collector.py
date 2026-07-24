@@ -67,6 +67,13 @@ async def run_cycle(base_url: str, token: str) -> int:
         return len(items)
 
 
+def log(mensaje: str) -> None:
+    # Timestamped and flushed so the lines show up in the Windows service log
+    # (NSSM) right away instead of sitting in a buffer.
+    hora = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{hora}] {mensaje}", flush=True)
+
+
 async def main() -> None:
     parser = argparse.ArgumentParser(description="Colector local de telemetría PMS")
     parser.add_argument("--base-url", required=True)
@@ -75,8 +82,14 @@ async def main() -> None:
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args()
     while True:
-        count = await run_cycle(args.base_url, args.token)
-        print(f"Telemetría enviada para {count} equipos")
+        # Running as a service means "forget about it": a transient network or API
+        # error must not kill the loop. Catch per cycle, log it, and try again next
+        # tick. Unreachable individual printers are already handled inside run_cycle.
+        try:
+            count = await run_cycle(args.base_url, args.token)
+            log(f"Telemetría enviada para {count} equipos")
+        except Exception as exc:
+            log(f"Error en el ciclo (se reintenta): {exc}")
         if args.once:
             break
         await asyncio.sleep(max(args.interval, 60))
