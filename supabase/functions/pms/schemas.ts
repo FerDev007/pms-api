@@ -102,12 +102,14 @@ export const usuarioCreate = z.object({
   username: z.string().min(3).max(80).regex(/^[a-zA-Z0-9._-]+$/, 'Solo se permiten letras, números, punto, guion y guion bajo'),
   nombre: z.string().min(2).max(160),
   password: z.string().min(8).max(128),
+  rol: z.enum(['superuser', 'admin']).default('admin')
 })
 
 export const usuarioUpdate = z.object({
   nombre: z.string().min(2).max(160).optional(),
   activo: z.boolean().optional(),
   password: z.string().min(8).max(128).optional(),
+  rol: z.enum(['superuser', 'admin']).optional()
 })
 
 export const passwordChange = z.object({

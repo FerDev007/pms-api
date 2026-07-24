@@ -32,8 +32,6 @@ export function LoginPage() {
     }
   })
   return <main className="relative grid min-h-screen place-items-center overflow-hidden px-4 py-10">
-    <div aria-hidden className="pointer-events-none absolute -right-24 -top-24 h-80 w-80 rounded-full bg-[#e9dcc2]/60 blur-3xl"/>
-    <div aria-hidden className="pointer-events-none absolute -bottom-24 -left-24 h-80 w-80 rounded-full bg-[#dcd6c8]/60 blur-3xl"/>
     <div className="w-full max-w-md">
       <div className="mb-8 text-center"><img src="/pms-icon.svg" alt="" className="mx-auto h-16 w-16 rounded-2xl shadow-fab"/><h1 className="mt-4 text-3xl font-bold tracking-tight text-ink">PMS</h1><p className="eyebrow mt-1">Control de impresión</p></div>
       <Card className="p-6 shadow-float sm:p-8"><div className="mb-7"><h2 className="text-xl font-bold tracking-tight text-ink">Tu inventario, en orden.</h2><p className="mt-2 text-sm text-muted">Ingresa para revisar existencias, registrar movimientos y consultar tus equipos.</p></div>

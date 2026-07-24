@@ -46,7 +46,7 @@ const db: SupabaseClient = createClient(SUPABASE_URL, SERVICE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 })
 
-const USUARIO_COLS = 'id,username,nombre,activo,creado_en'
+const USUARIO_COLS = 'id,username,nombre,activo,creado_en,rol,debe_cambiar_password'
 // Every supply carries its printer's display name so listing screens can tell apart
 // the five different "Black Toner" rows without dumping the whole compatible-models
 // string. The FK is unambiguous, so the embed resolves cleanly.
@@ -61,7 +61,8 @@ class ApiError extends Error {
   }
 }
 
-type Usuario = { id: number; username: string; nombre: string; activo: boolean; creado_en: string; auth_user_id: string }
+type Rol = 'superuser' | 'admin'
+type Usuario = { id: number; username: string; nombre: string; activo: boolean; creado_en: string; auth_user_id: string; rol: Rol; debe_cambiar_password: boolean }
 
 // ---------------------------------------------------------------- helpers
 
@@ -181,6 +182,13 @@ function readQuery<T>(c: any, schema: { safeParse: (v: unknown) => any }): T {
 
 const emailFor = (username: string) => `${username.trim().toLowerCase()}@${EMAIL_DOMAIN}`
 
+/** La sección de usuarios es solo para superusuarios. */
+function requireSuperuser(c: any): Usuario {
+  const usuario = c.get('usuario') as Usuario
+  if (usuario.rol !== 'superuser') throw new ApiError(403, 'No tienes permiso para administrar usuarios')
+  return usuario
+}
+
 /** Length is allowed to leak, exactly as hmac.compare_digest does. */
 function timingSafeEqual(a: string, b: string): boolean {
   const ea = new TextEncoder().encode(a)
@@ -278,6 +286,8 @@ app.post('/auth/change-password', async (c) => {
   if (error) throw new ApiError(400, 'La contraseña actual no coincide')
   const updated = await db.auth.admin.updateUserById(usuario.auth_user_id, { password: data.password_nuevo })
   if (updated.error) throw new ApiError(400, mensajeAuth(updated.error, 'No se pudo cambiar la contraseña'))
+  // Al cambiar la contraseña se cumple el cambio obligatorio del primer ingreso.
+  await db.from('pms_usuario').update({ debe_cambiar_password: false }).eq('id', usuario.id)
   return c.body(null, 204)
 })
 
@@ -486,6 +496,7 @@ app.post('/transacciones/:id/revertir', async (c) => {
 // --- usuarios ---------------------------------------------------
 
 app.get('/usuarios', async (c) => {
+  requireSuperuser(c)
   const q = readQuery<any>(c, listaSimple)
   let query = db.from('pms_usuario').select(USUARIO_COLS, { count: 'exact' })
   if (q.q) query = query.or(`username.ilike.${like(q.q)},nombre.ilike.${like(q.q)}`)
@@ -495,6 +506,7 @@ app.get('/usuarios', async (c) => {
 })
 
 app.post('/usuarios', async (c) => {
+  requireSuperuser(c)
   const data = await readBody<any>(c, usuarioCreate)
   const username = data.username.trim().toLowerCase()
   const existing = unwrap(await db.from('pms_usuario').select('id').eq('username', username).limit(1))
@@ -508,10 +520,11 @@ app.post('/usuarios', async (c) => {
     email_confirm: true,
     user_metadata: { username },
   })
-  if (created.error) throw new ApiError(409, 'El nombre de usuario ya existe')
+  if (created.error) throw new ApiError(409, mensajeAuth(created.error, 'No se pudo crear el usuario'))
 
+  // Todo usuario nuevo cambia su contraseña en el primer ingreso.
   const res = await db.from('pms_usuario')
-    .insert({ username, nombre: data.nombre.trim(), activo: true, auth_user_id: created.data.user.id })
+    .insert({ username, nombre: data.nombre.trim(), activo: true, auth_user_id: created.data.user.id, rol: data.rol, debe_cambiar_password: true })
     .select(USUARIO_COLS).single()
   if (res.error) {
     // Do not leave an orphaned auth identity behind if the profile insert fails.
@@ -522,7 +535,7 @@ app.post('/usuarios', async (c) => {
 })
 
 app.patch('/usuarios/:id', async (c) => {
-  const actual = c.get('usuario') as Usuario
+  const actual = requireSuperuser(c)
   const id = Number(c.req.param('id'))
   const { data: user } = await db.from('pms_usuario').select('*').eq('id', id).maybeSingle()
   if (!user) throw new ApiError(404, 'No se encontró el usuario')
@@ -530,6 +543,13 @@ app.patch('/usuarios/:id', async (c) => {
 
   const patch: Record<string, unknown> = {}
   if (data.nombre !== undefined) patch.nombre = data.nombre
+  if (data.rol !== undefined) {
+    // No permitir que un superusuario se quite a sí mismo el rol y se quede sin acceso.
+    if (data.rol !== 'superuser' && user.id === actual.id) {
+      throw new ApiError(400, 'No puedes quitarte tu propio rol de superusuario')
+    }
+    patch.rol = data.rol
+  }
   if (data.activo !== undefined) {
     if (data.activo === false) {
       if (user.id === actual.id) throw new ApiError(400, 'No puedes desactivar tu propia cuenta')

@@ -9,6 +9,7 @@ import type { User } from '@/lib/types'
 import { Loading } from '@/components/common'
 import { AppLayout } from '@/components/layout'
 import { LoginPage } from '@/pages/Login'
+import { ForcePasswordPage } from '@/pages/ForcePassword'
 
 const DashboardPage = lazy(() => import('@/pages/Dashboard').then(m => ({default:m.DashboardPage})))
 const InventoryPage = lazy(() => import('@/pages/Inventory').then(m => ({default:m.InventoryPage})))
@@ -44,6 +45,8 @@ export default function App() {
   const me = useQuery({ queryKey: ['me'], queryFn: () => api<User>('/pms/auth/me'), retry: false, enabled: !!session })
   if (session === undefined || (session && me.isPending)) return <Loading label="Preparando PMS"/>
   if (!session || !me.data) return <><LoginPage/><Toaster position="top-center" richColors/></>
+  // Cambio de contraseña obligatorio en el primer ingreso: bloquea la app hasta hacerlo.
+  if (me.data.debe_cambiar_password) return <><ForcePasswordPage user={me.data}/><Toaster position="top-center" richColors/></>
   return <>
     <Suspense fallback={<Loading label="Abriendo vista"/>}><Routes>
       <Route element={<AppLayout user={me.data}/>}>
@@ -56,8 +59,8 @@ export default function App() {
         <Route path="equipos" element={<SitesPage/>}/>
         <Route path="equipos/:id" element={<SiteDetailPage/>}/>
         <Route path="catalogo/impresoras" element={<PrintersPage/>}/>
-        <Route path="usuarios" element={<UsersPage/>}/>
-        <Route path="mas" element={<MorePage/>}/>
+        <Route path="usuarios" element={me.data.rol === 'superuser' ? <UsersPage/> : <Navigate to="/" replace/>}/>
+        <Route path="mas" element={<MorePage user={me.data}/>}/>
         <Route path="mas/reporte" element={<StockReportPage/>}/>
         <Route path="mas/cuenta" element={<AccountPage user={me.data}/>}/>
         <Route path="mas/descargas" element={<DownloadsPage/>}/>
