@@ -117,6 +117,9 @@ frontend/coverage/
 # type-checking entirely on a clean CI build.
 frontend/*.tsbuildinfo
 
+# Colector empaquetado (PyInstaller) — binario grande y específico del SO
+app/dist/
+
 # Supabase CLI local stack
 supabase/.temp/
 supabase/.branches/
