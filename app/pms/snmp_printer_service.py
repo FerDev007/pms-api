@@ -187,12 +187,20 @@ class SNMPService:
             elif any(p in d for p in CARTUCHO_PALABRAS):
                 cartuchos.append(SuministroSMNP(nombre="Cartucho", uso=uso))
 
-        # ordenar los tóners C, M, Y, K para una vista consistente
+        # Un tóner por color: algunas impresoras listan el mismo color dos veces (el
+        # tóner y su tambor/kit, ambos con "toner" en la descripción). Nos quedamos con
+        # el nivel más bajo, que es el consumible que realmente se gasta.
+        por_color: dict[str, SuministroSMNP] = {}
+        for t in toners:
+            previo = por_color.get(t.color or "")
+            uso_t = t.uso if t.uso is not None else 101
+            if previo is None or uso_t < (previo.uso if previo.uso is not None else 101):
+                por_color[t.color or ""] = t
         orden = {etiqueta: i for i, (_c, etiqueta, _p) in enumerate(COLORES)}
-        toners.sort(key=lambda t: orden.get(t.color or "", 99))
+        toners_unicos = sorted(por_color.values(), key=lambda t: orden.get(t.color or "", 99))
         # cartucho: el más urgente (menor nivel conocido)
         cartucho = min(cartuchos, key=lambda c: c.uso if c.uso is not None else 101) if cartuchos else None
-        return toners, cartucho
+        return toners_unicos, cartucho
 
     async def get_consumo(self, ip: str) -> ConsumoSMNP:
         total = self._to_int(await self.query_oid(ip, IMPRESIONES_TOTALES)) or 0
