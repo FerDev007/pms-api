@@ -6,7 +6,7 @@ import type { Dashboard, Page, Supply } from '@/lib/types'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ErrorState, Loading, PageHeader, StockBadge } from '@/components/common'
-import { formatDate, movementLabel } from '@/lib/utils'
+import { formatDate, movementLabel, supplyMeta } from '@/lib/utils'
 
 export function DashboardPage() {
   const dashboard = useQuery({ queryKey: ['dashboard'], queryFn: () => api<Dashboard>('/pms/dashboard') })
@@ -35,7 +35,7 @@ export function DashboardPage() {
     </section>
     <section className="mt-8 grid gap-6 lg:grid-cols-2">
       <div><div className="mb-3 flex items-center justify-between"><h2 className="section-title">Necesitan atención</h2><Link className="text-sm font-semibold text-brand hover:underline" to="/inventario?estado=bajo">Ver inventario</Link></div>
-        <div className="grid grid-cols-1 gap-3">{low.data?.items.length ? low.data.items.map(item => <Link key={item.id} to={`/inventario/${item.id}`} className="row-card min-h-20 p-3"><span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-warn-soft text-warn"><CircleAlert size={20}/></span><span className="min-w-0 flex-1"><strong className="block truncate text-ink">{item.nombre}</strong><span className="font-mono text-xs text-muted">{item.sku}</span></span><StockBadge stock={item.stock} minimum={item.stock_minimo}/></Link>) : <p className="empty-note">No hay suministros con stock bajo.</p>}</div>
+        <div className="grid grid-cols-1 gap-3">{low.data?.items.length ? low.data.items.map(item => <Link key={item.id} to={`/inventario/${item.id}`} className="row-card min-h-20 p-3"><span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-warn-soft text-warn"><CircleAlert size={20}/></span><span className="min-w-0 flex-1"><strong className="block truncate text-ink">{item.nombre}</strong><span className="block truncate text-xs text-muted">{supplyMeta(item)}</span></span><StockBadge stock={item.stock} minimum={item.stock_minimo}/></Link>) : <p className="empty-note">No hay suministros con stock bajo.</p>}</div>
       </div>
       <div><div className="mb-3 flex items-center justify-between"><h2 className="section-title">Últimos movimientos</h2><Link className="text-sm font-semibold text-brand hover:underline" to="/movimientos">Ver historial</Link></div>
         <div className="grid grid-cols-1 gap-3">{data.movimientos_recientes.length ? data.movimientos_recientes.map(item => <Link key={item.id} to={`/movimientos/${item.id}`} className="row-card min-h-20 p-3"><span className={`grid h-12 w-12 shrink-0 place-items-center rounded-xl ${item.tipo_transaccion.includes('salida') ? 'bg-bad-soft text-bad' : 'bg-good-soft text-good'}`}>{item.tipo_transaccion.includes('salida') ? <ArrowUpRight/> : <ArrowDownLeft/>}</span><span className="min-w-0 flex-1"><strong className="block truncate text-ink">{item.suministro.nombre}</strong><span className="text-xs text-muted">{movementLabel(item.tipo_transaccion)} · {formatDate(item.fecha)}</span></span><span className="font-mono font-semibold text-ink">{item.stock_despues}</span></Link>) : <p className="empty-note">Aún no hay movimientos registrados.</p>}</div>

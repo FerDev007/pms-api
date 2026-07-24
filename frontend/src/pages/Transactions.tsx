@@ -11,7 +11,7 @@ import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { FilterSelect } from '@/components/fields'
 import { Empty, ErrorState, Loading, PageHeader, StockBadge } from '@/components/common'
-import { SUPPLY_COLORS, SUPPLY_TYPES, formatDate, movementLabel, supplyColor } from '@/lib/utils'
+import { SUPPLY_COLORS, SUPPLY_TYPES, formatDate, movementLabel, supplyColor, supplyMeta } from '@/lib/utils'
 
 function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return <button type="button" onClick={onClick} className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-xs font-semibold transition ${active?'border-ink bg-ink text-white':'border-line bg-surface text-muted hover:border-ink/40 hover:text-ink'}`}>{children}</button>
@@ -33,6 +33,13 @@ export function MovementPage() {
     (!color||supplyColor(item.nombre)===color)&&
     (!search||`${item.nombre} ${item.sku} ${item.upc}`.toLowerCase().includes(search.toLowerCase()))
   )??[]
+  // Colores realmente presentes para la impresora elegida. Una impresora B/N solo tiene
+  // negro, así que no tiene sentido mostrar Cian/Magenta/Amarillo ni la sección Color.
+  const relevantes=supplies.data?.items.filter(item=>!printerId||item.impresora_id===printerId)??[]
+  const coloresDisponibles=SUPPLY_COLORS.filter(c=>relevantes.some(item=>supplyColor(item.nombre)===c.value))
+  const mostrarColor=coloresDisponibles.length>1
+  // Si el color elegido deja de existir al cambiar de impresora, se limpia el filtro.
+  useEffect(()=>{if(color&&!coloresDisponibles.some(c=>c.value===color))setColor('')},[printerId,supplies.data])// eslint-disable-line react-hooks/exhaustive-deps
   const activeFilters=[printerId,tipoSuministro,color].filter(Boolean).length
   const after=selected?type==='entrada'?selected.stock+quantity:selected.stock-quantity:0
   const insufficient=!!selected&&type==='salida'&&quantity>selected.stock
@@ -48,18 +55,18 @@ export function MovementPage() {
         {showFilters&&<div className="mt-4 grid gap-4 rounded-2xl bg-canvas p-4">
           <div><p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted">Impresora</p><div className="flex flex-wrap gap-2">{printers.data?.map(p=><Chip key={p.id} active={printerId===p.id} onClick={()=>setPrinterId(printerId===p.id?0:p.id)}>{p.nombre_para_mostrar}</Chip>)}</div></div>
           <div><p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted">Tipo</p><div className="flex flex-wrap gap-2">{SUPPLY_TYPES.map(t=><Chip key={t.value} active={tipoSuministro===t.value} onClick={()=>setTipoSuministro(tipoSuministro===t.value?'':t.value)}>{t.label}</Chip>)}</div></div>
-          <div><p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted">Color</p><div className="flex flex-wrap gap-2">{SUPPLY_COLORS.map(c=><Chip key={c.value} active={color===c.value} onClick={()=>setColor(color===c.value?'':c.value)}><span className="h-2.5 w-2.5 rounded-full border border-white/40" style={{background:c.dot}}/>{c.label}</Chip>)}</div></div>
+          {mostrarColor&&<div><p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted">Color</p><div className="flex flex-wrap gap-2">{coloresDisponibles.map(c=><Chip key={c.value} active={color===c.value} onClick={()=>setColor(color===c.value?'':c.value)}><span className="h-2.5 w-2.5 rounded-full border border-white/40" style={{background:c.dot}}/>{c.label}</Chip>)}</div></div>}
         </div>}
         <div className="mt-4 grid max-h-[22rem] grid-cols-1 gap-2 overflow-y-auto">
           {supplies.isLoading&&<p className="empty-note">Cargando suministros…</p>}
           {!matches.length&&supplies.data&&<p className="empty-note">Ningún suministro coincide con la búsqueda o los filtros.</p>}
-          {matches.map(item=><button type="button" key={item.id} onClick={()=>setSupplyId(item.id)} className="flex min-h-16 items-center gap-3 rounded-xl border border-line bg-surface p-3 text-left transition hover:border-ink/40 hover:shadow-card">{item.picture_url?<img src={item.picture_url} alt="" className="h-11 w-11 shrink-0 rounded-lg bg-canvas object-contain p-1"/>:<span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-brand-soft text-muted"><Boxes size={18}/></span>}<span className="min-w-0 flex-1"><strong className="block truncate text-sm text-ink">{item.nombre}</strong><small className="block truncate font-mono text-xs text-muted">{item.sku} · {item.upc}</small></span><StockBadge stock={item.stock} minimum={item.stock_minimo}/></button>)}
+          {matches.map(item=><button type="button" key={item.id} onClick={()=>setSupplyId(item.id)} className="flex min-h-16 items-center gap-3 rounded-xl border border-line bg-surface p-3 text-left transition hover:border-ink/40 hover:shadow-card">{item.picture_url?<img src={item.picture_url} alt="" className="h-11 w-11 shrink-0 rounded-lg bg-canvas object-contain p-1"/>:<span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-brand-soft text-muted"><Boxes size={18}/></span>}<span className="min-w-0 flex-1"><strong className="block truncate text-sm text-ink">{item.nombre}</strong><small className="block truncate text-xs text-muted">{supplyMeta(item)}</small></span><StockBadge stock={item.stock} minimum={item.stock_minimo}/></button>)}
         </div>
       </Card>
       :<>
       <Card className="flex items-center gap-4 p-4">
         {selected.picture_url?<img src={selected.picture_url} alt="" className="h-16 w-16 shrink-0 rounded-xl bg-canvas object-contain p-1.5"/>:<span className="grid h-16 w-16 shrink-0 place-items-center rounded-xl bg-brand-soft text-muted"><Boxes size={24}/></span>}
-        <div className="min-w-0 flex-1"><strong className="block truncate text-ink">{selected.nombre}</strong><small className="block font-mono text-xs text-muted">{selected.sku}</small><div className="mt-1.5"><StockBadge stock={selected.stock} minimum={selected.stock_minimo}/></div></div>
+        <div className="min-w-0 flex-1"><strong className="block truncate text-ink">{selected.nombre}</strong><small className="block truncate text-xs text-muted">{supplyMeta(selected)}</small><div className="mt-1.5"><StockBadge stock={selected.stock} minimum={selected.stock_minimo}/></div></div>
         <Button variant="secondary" size="sm" onClick={()=>setSupplyId(0)}>Cambiar</Button>
       </Card>
       <Card>

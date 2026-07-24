@@ -35,3 +35,9 @@ export function supplyColor(name: string) {
   const lower = name.toLowerCase()
   return SUPPLY_COLORS.find(color => color.keywords.some(keyword => lower.includes(keyword)))?.value ?? ''
 }
+
+// Línea secundaria de una tarjeta de suministro: modelo de impresora + SKU. Distingue
+// los cinco "Black Toner" sin volcar toda la lista de productos compatibles.
+export function supplyMeta(item: { impresora?: { nombre_para_mostrar: string }; sku: string }) {
+  return [item.impresora?.nombre_para_mostrar, item.sku].filter(Boolean).join(' · ')
+}

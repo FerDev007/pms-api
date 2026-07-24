@@ -47,10 +47,13 @@ const db: SupabaseClient = createClient(SUPABASE_URL, SERVICE_KEY, {
 })
 
 const USUARIO_COLS = 'id,username,nombre,activo,creado_en'
-const SUMINISTRO_SEL = '*'
+// Every supply carries its printer's display name so listing screens can tell apart
+// the five different "Black Toner" rows without dumping the whole compatible-models
+// string. The FK is unambiguous, so the embed resolves cleanly.
+const SUMINISTRO_SEL = '*, impresora:pms_impresora(nombre_para_mostrar)'
 const IMPRESORA_SEL = '*, suministros:pms_suministro(*)'
 const SITIO_SEL = '*, impresora:pms_impresora(id,nombre,nombre_para_mostrar,picture_url), telemetria:pms_telemetria_impresora(*)'
-const TRANSACCION_SEL = `*, suministro:pms_suministro(*), usuario:pms_usuario(${USUARIO_COLS})`
+const TRANSACCION_SEL = `*, suministro:pms_suministro(*, impresora:pms_impresora(nombre_para_mostrar)), usuario:pms_usuario(${USUARIO_COLS})`
 
 class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -144,7 +147,7 @@ async function getPrinter(id: number) {
 }
 
 async function getSupply(id: number) {
-  const { data } = await db.from('pms_suministro').select('*').eq('id', id).maybeSingle()
+  const { data } = await db.from('pms_suministro').select(SUMINISTRO_SEL).eq('id', id).maybeSingle()
   if (!data) throw new ApiError(404, 'No se encontró el suministro')
   return data
 }
