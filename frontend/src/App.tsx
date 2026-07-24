@@ -21,6 +21,7 @@ const SiteDetailPage = lazy(() => import('@/pages/Sites').then(m => ({default:m.
 const PrintersPage = lazy(() => import('@/pages/Printers').then(m => ({default:m.PrintersPage})))
 const UsersPage = lazy(() => import('@/pages/Users').then(m => ({default:m.UsersPage})))
 const MorePage = lazy(() => import('@/pages/More').then(m => ({default:m.MorePage})))
+const StockReportPage = lazy(() => import('@/pages/More').then(m => ({default:m.StockReportPage})))
 const AccountPage = lazy(() => import('@/pages/More').then(m => ({default:m.AccountPage})))
 const DownloadsPage = lazy(() => import('@/pages/More').then(m => ({default:m.DownloadsPage})))
 
@@ -57,6 +58,7 @@ export default function App() {
         <Route path="catalogo/impresoras" element={<PrintersPage/>}/>
         <Route path="usuarios" element={<UsersPage/>}/>
         <Route path="mas" element={<MorePage/>}/>
+        <Route path="mas/reporte" element={<StockReportPage/>}/>
         <Route path="mas/cuenta" element={<AccountPage user={me.data}/>}/>
         <Route path="mas/descargas" element={<DownloadsPage/>}/>
         <Route path="*" element={<Navigate to="/" replace/>}/>
