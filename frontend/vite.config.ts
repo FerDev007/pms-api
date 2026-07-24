@@ -9,16 +9,20 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['pms-logo.png'],
+      includeAssets: ['pms-icon.svg', 'favicon-64.png', 'apple-touch-icon.png'],
       manifest: {
         name: 'PMS · Control de suministros',
         short_name: 'PMS',
         description: 'Inventario y estado de impresoras',
-        theme_color: '#1c1b18',
+        theme_color: '#f6f4ef',
         background_color: '#f6f4ef',
         display: 'standalone',
         start_url: '/',
-        icons: [{ src: '/pms-logo.png', sizes: '1254x1254', type: 'image/png', purpose: 'any maskable' }]
+        icons: [
+          { src: '/pms-logo-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: '/pms-logo.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: '/pms-logo.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+        ]
       },
       workbox: {
         navigateFallback: '/index.html',

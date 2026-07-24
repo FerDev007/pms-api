@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="PMS">
+  <defs>
+    <linearGradient id="bgm" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2d2a25"/>
+      <stop offset="1" stop-color="#141310"/>
+    </linearGradient>
+    <linearGradient id="bodym" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f7f4ee"/>
+      <stop offset="1" stop-color="#e7e2d7"/>
+    </linearGradient>
+  </defs>
+  <!-- fondo a sangre completa (la plataforma recorta a círculo/squircle) -->
+  <rect x="0" y="0" width="512" height="512" fill="url(#bgm)"/>
+  <!-- glifo desplazado arriba para centrarse en la zona segura -->
+  <g transform="translate(0,-22)">
+    <rect x="180" y="150" width="152" height="94" rx="14" fill="#cbc5b8"/>
+    <rect x="120" y="214" width="272" height="150" rx="30" fill="url(#bodym)"/>
+    <circle cx="350" cy="252" r="9" fill="#e8b53a"/>
+    <rect x="152" y="332" width="208" height="14" rx="7" fill="#1c1b18" fill-opacity="0.82"/>
+    <rect x="172" y="346" width="168" height="76" rx="12" fill="#ffffff"/>
+    <circle cx="228" cy="390" r="10" fill="#25c1d4"/>
+    <circle cx="256" cy="390" r="10" fill="#ec4e86"/>
+    <circle cx="284" cy="390" r="10" fill="#f4c430"/>
+  </g>
+</svg>
