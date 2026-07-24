@@ -2,15 +2,51 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { color: #1c1b18; background: #f6f4ef; font-family: 'Instrument Sans', system-ui, sans-serif; font-synthesis: none; -webkit-font-smoothing: antialiased; }
+/* Paleta como canales R G B. El tema oscuro solo redefine estas variables; todo lo
+   demás (clases de Tailwind con estos colores) se adapta solo. */
+:root {
+  --c-canvas: 246 244 239;
+  --c-surface: 255 255 255;
+  --c-line: 231 227 218;
+  --c-ink: 28 27 24;
+  --c-muted: 135 129 111;
+  --c-brand: 28 27 24;
+  --c-brand-700: 0 0 0;
+  --c-brand-soft: 239 236 228;
+  --c-accent: 58 56 51;
+  --c-good: 63 125 93;   --c-good-soft: 238 244 238; --c-good-line: 207 224 210;
+  --c-warn: 156 109 30;  --c-warn-soft: 249 243 228; --c-warn-line: 234 217 176;
+  --c-bad: 181 71 63;    --c-bad-soft: 249 237 234;  --c-bad-line: 233 201 195;
+  --glow-1: 190 168 120; --glow-1-a: .10;
+  --glow-2: 28 27 24;    --glow-2-a: .04;
+}
+:root[data-theme="dark"] {
+  --c-canvas: 24 23 21;
+  --c-surface: 33 32 29;
+  --c-line: 56 53 48;
+  --c-ink: 240 237 230;
+  --c-muted: 162 155 140;
+  --c-brand: 236 232 223;   /* claro: las superficies de énfasis (botones) se invierten */
+  --c-brand-700: 255 255 255;
+  --c-brand-soft: 45 43 39;
+  --c-accent: 205 200 189;
+  --c-good: 122 183 150; --c-good-soft: 30 42 36; --c-good-line: 52 74 62;
+  --c-warn: 216 170 98;  --c-warn-soft: 46 40 27; --c-warn-line: 82 68 41;
+  --c-bad: 224 132 124;  --c-bad-soft: 48 31 29;  --c-bad-line: 88 55 51;
+  --glow-1: 190 168 120; --glow-1-a: .06;
+  --glow-2: 0 0 0;       --glow-2-a: .25;
+}
+
+:root { color: rgb(var(--c-ink)); background: rgb(var(--c-canvas)); font-family: 'Instrument Sans', system-ui, sans-serif; font-synthesis: none; -webkit-font-smoothing: antialiased; color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 * { box-sizing: border-box; }
-html { min-width: 320px; background: #f6f4ef; }
+html { min-width: 320px; background: rgb(var(--c-canvas)); }
 body { min-width: 320px; min-height: 100vh; margin: 0; background:
-  radial-gradient(60rem 32rem at 110% -10%, rgba(190,168,120,.10), transparent 60%),
-  radial-gradient(50rem 28rem at -15% 0%, rgba(28,27,24,.04), transparent 55%), #f6f4ef; }
+  radial-gradient(60rem 32rem at 110% -10%, rgb(var(--glow-1) / var(--glow-1-a)), transparent 60%),
+  radial-gradient(50rem 28rem at -15% 0%, rgb(var(--glow-2) / var(--glow-2-a)), transparent 55%), rgb(var(--c-canvas)); }
 button, input, select, textarea { font: inherit; }
 button { -webkit-tap-highlight-color: transparent; }
-::selection { background: #1c1b18; color: #f6f4ef; }
+::selection { background: rgb(var(--c-ink)); color: rgb(var(--c-canvas)); }
 
 .safe-bottom { padding-bottom: calc(6.5rem + env(safe-area-inset-bottom)); }
 .bottom-nav { padding-bottom: max(.5rem, env(safe-area-inset-bottom)); }

@@ -14,7 +14,7 @@ import { Empty, ErrorState, Loading, PageHeader, StockBadge } from '@/components
 import { SUPPLY_COLORS, SUPPLY_TYPES, formatDate, movementLabel, supplyColor, supplyMeta } from '@/lib/utils'
 
 function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return <button type="button" onClick={onClick} className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-xs font-semibold transition ${active?'border-ink bg-ink text-white':'border-line bg-surface text-muted hover:border-ink/40 hover:text-ink'}`}>{children}</button>
+  return <button type="button" onClick={onClick} className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-xs font-semibold transition ${active?'border-ink bg-ink text-canvas':'border-line bg-surface text-muted hover:border-ink/40 hover:text-ink'}`}>{children}</button>
 }
 
 export function MovementPage() {
@@ -49,7 +49,7 @@ export function MovementPage() {
         <div className="flex gap-2">
           <label className="relative flex-1"><Search className="absolute left-3.5 top-3 text-muted" size={18}/><Input className="pl-11" placeholder="Nombre, SKU o UPC" value={search} onChange={e=>setSearch(e.target.value)}/></label>
           <Button variant={scanning?'default':'secondary'} size="icon" onClick={()=>setScanning(!scanning)} aria-label={scanning?'Cerrar cámara':'Escanear UPC'}>{scanning?<X size={19}/>:<Camera size={19}/>}</Button>
-          <Button variant={showFilters||activeFilters?'default':'secondary'} size="icon" className="relative" onClick={()=>setShowFilters(!showFilters)} aria-label="Filtros"><SlidersHorizontal size={18}/>{activeFilters>0&&<span className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-warn text-[10px] font-bold text-white">{activeFilters}</span>}</Button>
+          <Button variant={showFilters||activeFilters?'default':'secondary'} size="icon" className="relative" onClick={()=>setShowFilters(!showFilters)} aria-label="Filtros"><SlidersHorizontal size={18}/>{activeFilters>0&&<span className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-warn text-[10px] font-bold text-canvas">{activeFilters}</span>}</Button>
         </div>
         {scanning&&<div className="mt-4 overflow-hidden rounded-2xl border-2 border-ink bg-ink shadow-lift"><video ref={video} className="aspect-video w-full object-cover" muted/><p className="p-3 text-center text-xs text-white/80">Centra el código dentro de la imagen.</p></div>}
         {showFilters&&<div className="mt-4 grid gap-4 rounded-2xl bg-canvas p-4">

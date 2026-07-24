@@ -17,7 +17,7 @@ export function DashboardPage() {
   return <>
     <PageHeader eyebrow="Resumen de hoy" title="Todo lo que imprime, en orden." description="Existencias y equipos en una sola vista, sin perseguir hojas de cálculo."/>
     <section className="grid gap-4 md:grid-cols-[1.2fr_.8fr]">
-      <Card className="relative flex min-h-56 flex-col justify-between overflow-hidden border-0 bg-gradient-to-br from-brand via-brand to-accent p-6 text-white shadow-lift sm:p-7">
+      <Card className="relative flex min-h-56 flex-col justify-between overflow-hidden border border-line bg-gradient-to-br from-[#1c1b18] via-[#1c1b18] to-[#3a3833] p-6 text-white shadow-lift sm:p-7">
         <div aria-hidden className="absolute -right-12 -top-12 h-44 w-44 rounded-full bg-white/10"/>
         <div aria-hidden className="absolute -bottom-16 right-16 h-36 w-36 rounded-full bg-white/5"/>
         <div><p className="text-xs font-bold uppercase tracking-[.14em] text-white/70">Piezas disponibles</p><div className="mt-3 font-display text-6xl font-semibold leading-none sm:text-7xl">{data.stock_total}</div></div>

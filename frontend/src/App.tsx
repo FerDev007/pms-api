@@ -64,6 +64,6 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace/>}/>
       </Route>
     </Routes></Suspense>
-    <Toaster position="top-center" toastOptions={{style: {background: '#ffffff', color: '#1c1b18', borderColor: '#e7e3da', borderRadius: '14px', boxShadow: '0 16px 32px -16px rgba(28,27,24,.2)'}}}/>
+    <Toaster position="top-center" toastOptions={{style: {background: 'rgb(var(--c-surface))', color: 'rgb(var(--c-ink))', borderColor: 'rgb(var(--c-line))', borderRadius: '14px', boxShadow: '0 16px 32px -16px rgba(0,0,0,.28)'}}}/>
   </>
 }

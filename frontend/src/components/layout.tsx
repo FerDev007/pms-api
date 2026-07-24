@@ -13,7 +13,7 @@ const nav = [
 function NavItem({ item, desktop = false }: { item: typeof nav[number]; desktop?: boolean }) {
   const Icon = item.icon
   if (item.primary && !desktop) {
-    return <NavLink to={item.to} aria-label={item.label} className="flex flex-col items-center justify-center"><span className="-mt-7 grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-brand to-accent text-white shadow-fab transition active:scale-95"><Icon size={26}/></span><span className="mt-1 text-[10px] font-semibold text-muted">{item.label}</span></NavLink>
+    return <NavLink to={item.to} aria-label={item.label} className="flex flex-col items-center justify-center"><span className="-mt-7 grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-brand to-accent text-canvas shadow-fab transition active:scale-95"><Icon size={26}/></span><span className="mt-1 text-[10px] font-semibold text-muted">{item.label}</span></NavLink>
   }
   return <NavLink to={item.to} end={item.to === '/'} className={({isActive}) => `${desktop ? 'flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold' : 'flex min-h-14 min-w-14 flex-col items-center justify-center gap-1 rounded-2xl text-[10px] font-semibold'} transition ${isActive ? desktop ? 'bg-brand-soft text-brand' : 'text-brand' : 'text-muted hover:bg-canvas hover:text-ink'}`}>
     <Icon size={20}/><span>{item.label}</span>
