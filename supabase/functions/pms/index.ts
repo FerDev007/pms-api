@@ -21,7 +21,12 @@ const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
 const COLLECTOR_TOKEN = Deno.env.get('COLLECTOR_TOKEN') ?? ''
 const STALE_MINUTES = Number(Deno.env.get('TELEMETRY_STALE_MINUTES') ?? '15')
 const EMAIL_DOMAIN = Deno.env.get('PMS_EMAIL_DOMAIN') ?? 'pms.local'
-const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? 'http://localhost:5173')
+// An origin allowlist is public information, so the deployed frontend is the default
+// rather than something you must remember to set as a secret. ALLOWED_ORIGINS still
+// overrides it -- set that when adding a custom domain.
+// Note Cloudflare's per-deployment preview URLs (<hash>.pms-8pn.pages.dev) are
+// deliberately NOT covered: only the stable production alias is trusted.
+const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? 'https://pms-8pn.pages.dev,http://localhost:5173')
   .split(',').map((o) => o.trim()).filter(Boolean)
 
 // service_role bypasses the deny-all RLS on every pms_* table.
