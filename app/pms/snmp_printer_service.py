@@ -1,22 +1,30 @@
-import asyncio, httpx
-from bs4 import BeautifulSoup
-import urllib3
-from pysnmp.hlapi.v3arch.asyncio import *
+"""Consulta de impresoras por SNMP (Printer MIB, RFC 3805) usando pysnmp.
+
+Todo se lee por SNMP -- también las de color. Antes las de color raspaban el HTML de
+su web interna, lo cual se rompía cuando cambiaba la página. Los suministros se
+descubren recorriendo prtMarkerSuppliesDescription (43.11.1.1.6) para identificar qué
+índice es cada color/tambor, en vez de asumir posiciones fijas.
+"""
+
 from typing import Optional
+
 from pydantic import BaseModel
+from pysnmp.hlapi.v3arch.asyncio import (
+    CommunityData,
+    ContextData,
+    ObjectIdentity,
+    ObjectType,
+    SnmpEngine,
+    UdpTransportTarget,
+    get_cmd,
+    walk_cmd,
+)
 
 
-class BandejaSMNP(BaseModel):
-    nombre: str
-    uso: int
-    uso_msg: str
-
-
-# Cyan", "Magenta", "Amarillo", "Negro"
 class SuministroSMNP(BaseModel):
     nombre: str
     color: Optional[str] = None
-    uso: int
+    uso: Optional[int] = None  # porcentaje 0-100, o None si la impresora no lo informa
 
 
 class ConsumoSMNP(BaseModel):
@@ -34,75 +42,44 @@ class SMNPData(BaseModel):
     consumo: ConsumoSMNP
 
 
+# --- OIDs (Printer MIB estándar salvo los contadores Xerox) ---
+NOMBRE_IMPRESORA = "1.3.6.1.2.1.1.5.0"           # sysName
+NUMERO_SERIAL = "1.3.6.1.2.1.43.5.1.1.17.1"      # prtGeneralSerialNumber
+NOTIFICACIONES = "1.3.6.1.2.1.43.18.1.1.8"       # prtAlertDescription (walk)
+SUP_DESCRIPCION = "1.3.6.1.2.1.43.11.1.1.6"      # prtMarkerSuppliesDescription (walk)
+SUP_NIVEL = "1.3.6.1.2.1.43.11.1.1.9"            # prtMarkerSuppliesLevel
+SUP_CAPACIDAD = "1.3.6.1.2.1.43.11.1.1.8"        # prtMarkerSuppliesMaxCapacity
+IMPRESIONES_TOTALES = "1.3.6.1.2.1.43.10.2.1.4.1.1"  # prtMarkerLifeCount
+XEROX_IMPRESIONES_NEGRO = "1.3.6.1.4.1.253.8.53.13.2.1.6.1.20.34"
+XEROX_IMPRESIONES_COLOR = "1.3.6.1.4.1.253.8.53.13.2.1.6.1.20.33"
+
+COLORES = [
+    ("negro", "Negro", ("black", "negro", "schwarz", "noir")),
+    ("cian", "Cyan", ("cyan", "cian")),
+    ("magenta", "Magenta", ("magenta",)),
+    ("amarillo", "Amarillo", ("yellow", "amarillo", "gelb", "jaune")),
+]
+CARTUCHO_PALABRAS = ("drum", "tambor", "imaging", "smart kit", "kit", "cartridge", "cartucho", "maintenance", "mantenimiento")
+
+
 class SNMPService:
     snmpEngine = SnmpEngine()
-    NOMBRE_IMPRESORA = "1.3.6.1.2.1.1.5.0"
-    NUMERO_SERIAL = ".1.3.6.1.2.1.43.5.1.1.17.1"
-    NOTIFICACIONES = "1.3.6.1.2.1.43.18.1.1.8.1"
-    TONER_NEGRO_VALOR_RESTANTE = "1.3.6.1.2.1.43.11.1.1.9.1.1"
-    TONER_NEGRO_CAPACIDAD = "1.3.6.1.2.1.43.11.1.1.8.1.1"
+    a_color = False
 
-    NOMBRES_BANDEJAS = "1.3.6.1.2.1.43.8.2.1.13.1"
-    BANDEJA_ESTATUS = "1.3.6.1.2.1.43.8.2.1.11.1.{bandeja_num}"
-    BANDEJA_VALOR = "1.3.6.1.2.1.43.8.2.1.10.1.{bandeja_num}"
-    BANDEJA_CAPACIDAD = "1.3.6.1.2.1.43.8.2.1.9.1.{bandeja_num}"
-    BANDEJA_NOMBRE = "1.3.6.1.2.1.43.8.2.1.13.1.{bandeja_num}"
-
-    IMPRESIONES_NEGRO = "1.3.6.1.4.1.253.8.53.13.2.1.6.1.20.1"
-    IMPRESIONES_TOTALES = "1.3.6.1.2.1.43.10.2.1.4.1.1"
-
-    CARTUCHOS_VALOR_RESTANTE = [
-        "1.3.6.1.2.1.43.11.1.1.9.1.5",
-        "1.3.6.1.2.1.43.11.1.1.9.1.6",
-    ]
-    CARTUCHOS_CAPACIDAD = ["1.3.6.1.2.1.43.11.1.1.8.1.5", "1.3.6.1.2.1.43.11.1.1.8.1.6"]
-
-    def obtener_restante_suministro(
-        self, valor_restante: int, suministro_capacidad: int
-    ) -> int:
-        if suministro_capacidad == 0:
-            return 0  # evitar división por cero
-        porcentaje = (valor_restante / suministro_capacidad) * 100
-        return int(porcentaje)
-
-    def obtener_msg_uso_bandeja(self, uso_bandeja: int, capacidad_bandeja: int) -> str:
-        # Calculate tray usage/level
-        if uso_bandeja and capacidad_bandeja:
-            if capacidad_bandeja > 0:
-                usage_percent = (uso_bandeja / capacidad_bandeja) * 100
-                usage_text = (
-                    f"{usage_percent:.0f}% ({uso_bandeja}/{capacidad_bandeja} páginas)"
-                )
-            else:
-                usage_text = f"{uso_bandeja}"
-        elif uso_bandeja:
-            usage_text = f"{uso_bandeja}"
-        else:
-            usage_text = "Vacia"
-
-        return usage_text
-
-    def obtener_porcentaje_uso_bandeja(
-        self, uso_bandeja: int, capacidad_bandeja: int
-    ) -> Optional[int]:
-        """
-        Retorna el porcentaje de uso de la bandeja como entero (0-100),
-        o None si no se puede calcular (por ejemplo, capacidad desconocida o inválida).
-        """
-        try:
-            if capacidad_bandeja > 0 and uso_bandeja >= 0:
-                return int((uso_bandeja / capacidad_bandeja) * 100)
-            else:
-                return None
-        except (ValueError, TypeError):
-            return None
-
+    # ---------- utilidades ----------
     def _norm(self, oid) -> str:
-        """pysnmp no acepta OIDs con punto inicial (algunos constantes lo traen)."""
         return str(oid).lstrip(".")
 
+    def decode_hex(self, value) -> str:
+        try:
+            s = str(value)
+            if s.startswith("0x"):
+                return bytes.fromhex(s[2:]).decode("utf-8", errors="ignore")
+            return s
+        except Exception:
+            return str(value)
+
     def _render(self, value) -> str:
-        """Convierte un valor SNMP a texto legible, decodificando hex si hace falta."""
         if value is None:
             return ""
         try:
@@ -111,224 +88,130 @@ class SNMPService:
             texto = str(value)
         return self.decode_hex(texto)
 
-    async def query_oid(self, snmpEngine: SnmpEngine, ip: str, oid) -> Optional[str]:
-        """Consulta un OID puntual (GET) y devuelve el valor, o None."""
+    def _to_int(self, value) -> Optional[int]:
         try:
-            errorIndication, errorStatus, errorIndex, varBinds = await get_cmd(
-                snmpEngine,
+            return int(str(value).strip())
+        except (TypeError, ValueError):
+            return None
+
+    def _porcentaje(self, nivel, capacidad) -> Optional[int]:
+        """Nivel/capacidad -> porcentaje 0-100. Maneja los valores especiales del
+        Printer MIB: -1 (otro), -2 (desconocido), -3 (parcial) => desconocido."""
+        lv = self._to_int(nivel)
+        mx = self._to_int(capacidad)
+        if lv is None or lv < 0:
+            return None
+        if mx is not None and mx > 0:
+            return max(0, min(100, round(lv / mx * 100)))
+        # Capacidad desconocida: algunas impresoras ya reportan el nivel como porcentaje.
+        if 0 <= lv <= 100:
+            return lv
+        return None
+
+    async def query_oid(self, ip: str, oid) -> Optional[str]:
+        """GET de un OID puntual -> valor renderizado, o None."""
+        try:
+            ei, es, _ex, vbs = await get_cmd(
+                self.snmpEngine,
                 CommunityData("public", mpModel=0),
-                await UdpTransportTarget.create((ip, 161), timeout=3, retries=0),
+                await UdpTransportTarget.create((ip, 161), timeout=3, retries=1),
                 ContextData(),
                 ObjectType(ObjectIdentity(self._norm(oid))),
             )
-            if errorIndication or errorStatus:
+            if ei or es or not vbs:
                 return None
-            return varBinds[0][1] if varBinds else None
+            return self._render(vbs[0][1])
         except Exception:
             return None
 
-    async def snmp_walk(self, ip: str, oid: str) -> str:
-        """Recorre un subárbol OID con pysnmp (Python puro) en vez del binario
-        externo `snmpwalk`, para poder empaquetar el colector en un solo .exe.
-        Devuelve los valores unidos con '|', como antes."""
+    async def walk(self, ip: str, base_oid: str) -> list[str]:
+        """Recorre un subárbol y devuelve los valores en orden de índice. Las columnas
+        de una misma tabla se recorren en el mismo orden, así que se pueden combinar por
+        posición sin depender del formato del OID."""
         valores: list[str] = []
         try:
             objetos = walk_cmd(
                 self.snmpEngine,
                 CommunityData("public", mpModel=0),
-                await UdpTransportTarget.create((ip, 161), timeout=3, retries=0),
+                await UdpTransportTarget.create((ip, 161), timeout=3, retries=1),
                 ContextData(),
-                ObjectType(ObjectIdentity(self._norm(oid))),
-                lexicographicMode=False,  # no salirse del subárbol pedido
+                ObjectType(ObjectIdentity(self._norm(base_oid))),
+                lexicographicMode=False,
             )
-            async for errorIndication, errorStatus, errorIndex, varBinds in objetos:
-                if errorIndication or errorStatus:
+            async for ei, es, _ex, vbs in objetos:
+                if ei or es:
                     break
-                for _nombre, valor in varBinds:
-                    texto = self._render(valor)
-                    if texto:
-                        valores.append(texto)
+                for _oid, valor in vbs:
+                    valores.append(self._render(valor))
         except Exception as e:
-            print(f"Error en snmp_walk({oid}): {e}", flush=True)
-        return "|".join(valores)
+            print(f"Error en walk({base_oid}): {e}", flush=True)
+        return valores
 
-    def decode_hex(self, value) -> str:
-        """Decode hex string to readable text"""
-        try:
-            val_str = str(value)
-            if val_str.startswith("0x"):
-                hex_data = val_str[2:]
-                return bytes.fromhex(hex_data).decode("utf-8", errors="ignore")
-            return val_str
-        except:
-            return str(value)
-
-    def parse_trays(self, raw: str) -> list[str]:
-        trays = raw.split("|")
-        result = []
-
-        for i, tray in enumerate(trays, start=1):
-            tray = tray.strip()
-            if tray.lower() == "bypass tray":
-                result.append("Bandeja especial")
-            else:
-                result.append(f"Bandeja {i}")
-
-        return result
-
+    # ---------- identidad ----------
     async def get_nombre_impresora(self, ip: str) -> str:
-        # Instancia exacta (sysName.0) -> GET, no walk. Con net-snmp, snmpwalk sobre
-        # una instancia exacta devolvía el objeto siguiente, no este.
-        return self._render(await self.query_oid(self.snmpEngine, ip, self.NOMBRE_IMPRESORA))
+        return (await self.query_oid(ip, NOMBRE_IMPRESORA)) or ""
 
     async def get_serie(self, ip: str) -> str:
-        return self._render(await self.query_oid(self.snmpEngine, ip, self.NUMERO_SERIAL))
+        return (await self.query_oid(ip, NUMERO_SERIAL)) or ""
 
     async def get_notificaciones(self, ip: str) -> str:
-        texto = self._render(await self.query_oid(self.snmpEngine, ip, self.NOTIFICACIONES))
-        return texto if texto else "No hay notificaciones."
+        avisos = [v for v in await self.walk(ip, NOTIFICACIONES) if v and v.strip()]
+        return "|".join(avisos) if avisos else "No hay notificaciones."
 
-    async def get_bandejas(
-        self,
-        ip: str,
-    ) -> list[BandejaSMNP]:
+    # ---------- suministros ----------
+    async def _leer_suministros(self, ip: str) -> tuple[list[SuministroSMNP], Optional[SuministroSMNP]]:
+        # Se recorren las tres columnas de prtMarkerSuppliesTable y se combinan por
+        # posición (mismo orden de índice en las tres).
+        descripciones = await self.walk(ip, SUP_DESCRIPCION)
+        niveles = await self.walk(ip, SUP_NIVEL)
+        capacidades = await self.walk(ip, SUP_CAPACIDAD)
 
-        bandejas_objs: list[BandejaSMNP] = []
-        bandejas_str = await self.snmp_walk(ip, self.NOMBRES_BANDEJAS)
-        bandejas = self.parse_trays(bandejas_str)
-
-        for bandeja_num, bandeja_nombre in enumerate(bandejas, start=1):
-            nivel_bandeja = await self.query_oid(
-                self.snmpEngine, ip, self.BANDEJA_VALOR.format(bandeja_num=bandeja_num)
-            )
-            capacidad_bandeja = await self.query_oid(
-                self.snmpEngine,
-                ip,
-                self.BANDEJA_CAPACIDAD.format(bandeja_num=bandeja_num),
-            )
-            porcentaje_uso = self.obtener_porcentaje_uso_bandeja(
-                int(nivel_bandeja), int(capacidad_bandeja)
-            )
-            msg_porcentaje_uso = self.obtener_msg_uso_bandeja(
-                int(nivel_bandeja), int(capacidad_bandeja)
-            )
-            bandeja = BandejaSMNP(
-                nombre=bandeja_nombre,
-                uso=porcentaje_uso,
-                uso_msg=msg_porcentaje_uso,
-            )
-            bandejas_objs.append(bandeja)
-
-        return bandejas_objs
-
-    async def get_toners(self, ip: str) -> list[SuministroSMNP]:
-        valor_restante = await self.query_oid(
-            self.snmpEngine,
-            ip,
-            self.TONER_NEGRO_VALOR_RESTANTE,
-        )
-        valor_capacidad = await self.query_oid(
-            self.snmpEngine,
-            ip,
-            self.TONER_NEGRO_CAPACIDAD,
-        )
-
-        return [
-            SuministroSMNP(
-                nombre="Toner ",
-                color="Negro",
-                uso=self.obtener_restante_suministro(
-                    int(valor_restante), int(valor_capacidad)
-                ),
-            )
-        ]
-
-    async def get_cartucho(self, ip: str) -> SuministroSMNP:
-
-        for capacidad, restante in zip(
-            self.CARTUCHOS_CAPACIDAD, self.CARTUCHOS_VALOR_RESTANTE
-        ):
-            valor_restante = await self.query_oid(
-                self.snmpEngine,
-                ip,
-                restante,
-            )
-            cartucho_capacidad = await self.query_oid(
-                self.snmpEngine,
-                ip,
-                capacidad,
-            )
-
-            if valor_restante is None or cartucho_capacidad is None:
+        toners: list[SuministroSMNP] = []
+        cartuchos: list[SuministroSMNP] = []
+        for i, descripcion in enumerate(descripciones):
+            d = (descripcion or "").lower()
+            if not d:
                 continue
+            nivel = niveles[i] if i < len(niveles) else None
+            capacidad = capacidades[i] if i < len(capacidades) else None
+            uso = self._porcentaje(nivel, capacidad)
 
-            return SuministroSMNP(
-                nombre="Cartucho",
-                uso=self.obtener_restante_suministro(
-                    int(valor_restante), int(cartucho_capacidad)
-                ),
-            )
+            color = next((etiqueta for _clave, etiqueta, palabras in COLORES if any(p in d for p in palabras)), None)
+            es_toner = "toner" in d or "tóner" in d
+            if color and es_toner:
+                toners.append(SuministroSMNP(nombre="Tóner", color=color, uso=uso))
+            elif es_toner and not color:  # mono: "Toner Cartridge"
+                toners.append(SuministroSMNP(nombre="Tóner", color="Negro", uso=uso))
+            elif "waste" in d or "residual" in d:
+                continue  # depósito de residuos: no se muestra
+            elif any(p in d for p in CARTUCHO_PALABRAS):
+                cartuchos.append(SuministroSMNP(nombre="Cartucho", uso=uso))
+
+        # ordenar los tóners C, M, Y, K para una vista consistente
+        orden = {etiqueta: i for i, (_c, etiqueta, _p) in enumerate(COLORES)}
+        toners.sort(key=lambda t: orden.get(t.color or "", 99))
+        # cartucho: el más urgente (menor nivel conocido)
+        cartucho = min(cartuchos, key=lambda c: c.uso if c.uso is not None else 101) if cartuchos else None
+        return toners, cartucho
 
     async def get_consumo(self, ip: str) -> ConsumoSMNP:
-        impresiones_negro = await self.query_oid(
-            self.snmpEngine,
-            ip,
-            self.IMPRESIONES_NEGRO,
-        )
-        impresiones_totales = await self.query_oid(
-            self.snmpEngine,
-            ip,
-            self.IMPRESIONES_TOTALES,
-        )
+        total = self._to_int(await self.query_oid(ip, IMPRESIONES_TOTALES)) or 0
+        if self.a_color:
+            color = self._to_int(await self.query_oid(ip, XEROX_IMPRESIONES_COLOR))
+            negro = self._to_int(await self.query_oid(ip, XEROX_IMPRESIONES_NEGRO))
+            if negro is None:
+                negro = (total - color) if color is not None else total
+            return ConsumoSMNP(impresiones_en_negro=negro, impresiones_en_color=color, total_impresiones=total)
+        return ConsumoSMNP(impresiones_en_negro=total, total_impresiones=total)
 
-        return ConsumoSMNP(
-            impresiones_en_negro=int(impresiones_negro),
-            total_impresiones=int(impresiones_totales),
-        )
-
-    async def print_oid_info(self, ip: str):
-        nombre = await self.get_nombre_impresora(ip)
-        serie = await self.get_serie(ip)
-        notificaciones = await self.get_notificaciones(ip)
-        toners = await self.get_toners(ip)
-        cartucho = await self.get_cartucho(ip)
-        bandejas = await self.get_bandejas(ip)
-        consumo = await self.get_consumo(ip)
-        data = SMNPData(
-            nombre=nombre,
-            serie=serie,
-            notificaciones=notificaciones,
-            toners=toners,
-            bandejas=bandejas,
-            cartucho=cartucho,
-            consumo=consumo,
-        )
-
-        print(f"Nombre de la impresora: {nombre}")
-        print(f"Numero de serie: {data.serie}")
-        for notificacion in data.notificaciones.split("|"):
-            print(f"Notificacion: {notificacion}")
-
-        for bandeja in data.bandejas:
-            print(
-                f"bandeja {bandeja.nombre}, uso: {bandeja.uso}, uso_msg: {bandeja.uso_msg}"
-            )
-        for toner in data.toners:
-            print(f"Toner {toner.color}, uso: {toner.uso}%")
-
-        print(
-            f"Impresiones en negro: {consumo.impresiones_en_negro}\nimpresiones en color: {consumo.impresiones_en_color}\ntotal impresiones: {consumo.total_impresiones}"
-        )
-
+    # ---------- entrada principal ----------
     async def get_snmp_data(self, ip: str) -> SMNPData:
         nombre = await self.get_nombre_impresora(ip)
         if not nombre:
-            raise Exception("SNMP error: Error de conexión")
-
+            raise Exception("SNMP error: Error de conexión")
         serie = await self.get_serie(ip)
         notificaciones = await self.get_notificaciones(ip)
-        toners = await self.get_toners(ip)
-        cartucho = await self.get_cartucho(ip)
+        toners, cartucho = await self._leer_suministros(ip)
         consumo = await self.get_consumo(ip)
         return SMNPData(
             nombre=nombre,
@@ -338,127 +221,28 @@ class SNMPService:
             cartucho=cartucho,
             consumo=consumo,
         )
+
+    async def print_oid_info(self, ip: str) -> None:
+        data = await self.get_snmp_data(ip)
+        print(f"Nombre: {data.nombre}")
+        print(f"Serie:  {data.serie}")
+        for n in data.notificaciones.split("|"):
+            print(f"Aviso:  {n}")
+        for t in data.toners:
+            print(f"Tóner {t.color}: {t.uso}%")
+        if data.cartucho:
+            print(f"Cartucho: {data.cartucho.uso}%")
+        print(f"Impresiones negro={data.consumo.impresiones_en_negro} color={data.consumo.impresiones_en_color} total={data.consumo.total_impresiones}")
 
 
 class XeroxBWPrinterService(SNMPService):
-    pass
+    a_color = False
 
 
 class XeroxColorPrinterService(SNMPService):
-    async def get_toners(self, ip: str) -> list[SuministroSMNP]:
-
-        toners_objs: list[SuministroSMNP] = []
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        url = f"https://{ip}/stat/welcome.php?tab=status"
-        response = httpx.get(url, verify=False)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, "html.parser")
-            spans = soup.select("div.levelIndicatorPercentage > span")
-            percentages_uso = [
-                int(span.text.strip().replace("%", "")) for span in spans
-            ]
-            colores = ["Cyan", "Magenta", "Amarillo", "Negro"]
-            for color, percentage_uso in zip(colores, percentages_uso):
-                toners_objs.append(
-                    SuministroSMNP(nombre="Toner", color=color, uso=percentage_uso)
-                )
-
-            return toners_objs
-        else:
-            print(f"Request failed with status code {response.status_code}")
-            return []
-
-    async def get_consumo(self, ip: str) -> ConsumoSMNP:
-        impresiones_totales = await self.query_oid(
-            self.snmpEngine,
-            ip,
-            self.IMPRESIONES_TOTALES,
-        )
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        url = f"https://{ip}/stat/welcome.php?tab=status"
-        response = httpx.get(url, verify=False)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, "html.parser")
-            values = []
-            for row in soup.find_all("tr"):
-                cells = row.find_all("td")
-                if len(cells) == 2:
-                    label = cells[0].text.strip()
-                    if label in ["Black Impressions", "Color Impressions"]:
-                        value = int(cells[1].text.strip())
-                        values.append(value)
-
-            return ConsumoSMNP(
-                impresiones_en_negro=values[0],
-                impresiones_en_color=values[1],
-                total_impresiones=impresiones_totales,
-            )
-        else:
-            return ConsumoSMNP(
-                impresiones_en_negro=0,
-                impresiones_en_color=0,
-                total_impresiones=0,
-            )
-
-    async def print_oid_info(self, ip: str):
-        nombre = await self.get_nombre_impresora(ip)
-        serie = await self.get_serie(ip)
-        notificaciones = await self.get_notificaciones(ip)
-        toners = await self.get_toners(ip)
-        cartucho = await self.get_cartucho(ip)
-        bandejas = await self.get_bandejas(ip)
-        consumo = await self.get_consumo(ip)
-        data = SMNPData(
-            nombre=nombre,
-            serie=serie,
-            notificaciones=notificaciones,
-            toners=toners,
-            bandejas=bandejas,
-            cartucho=cartucho,
-            consumo=consumo,
-        )
-
-        print(f"Nombre de la impresora: {nombre}")
-        print(f"Numero de serie: {data.serie}")
-        for notificacion in data.notificaciones.split("|"):
-            print(f"Notificacion: {notificacion}")
-
-        for bandeja in data.bandejas:
-            print(
-                f"bandeja {bandeja.nombre}, uso: {bandeja.uso}, uso_msg: {bandeja.uso_msg}"
-            )
-        for toner in data.toners:
-            print(f"Toner {toner.color}, uso: {toner.uso}%")
-
-        print(
-            f"Impresiones en negro: {consumo.impresiones_en_negro}\nimpresiones en color: {consumo.impresiones_en_color}\ntotal impresiones: {consumo.total_impresiones}"
-        )
-
-    async def get_snmp_data(self, ip: str) -> SMNPData:
-        nombre = await self.get_nombre_impresora(ip)
-        if not nombre:
-            raise Exception("SNMP error: Error de conexión")
-
-        serie = await self.get_serie(ip)
-        notificaciones = await self.get_notificaciones(ip)
-        toners = await self.get_toners(ip)
-        cartucho = await self.get_cartucho(ip)
-        consumos = await self.get_consumo(ip)
-
-        return SMNPData(
-            nombre=nombre,
-            serie=serie,
-            notificaciones=notificaciones,
-            toners=toners,
-            cartucho=cartucho,
-            consumo=consumos,
-        )
+    a_color = True
 
 
-# service = XeroxBWPrinterService()
-# asyncio.run(service.print_oid_info(ip="10.250.36.195"))
-
-# print("------------" * 10)
-
-# service = XeroxColorPrinterService()
-# asyncio.run(service.print_oid_info(ip="10.250.36.87"))
+# Prueba local (una máquina en la red de las impresoras):
+#   import asyncio
+#   asyncio.run(XeroxColorPrinterService().print_oid_info("10.250.36.87"))

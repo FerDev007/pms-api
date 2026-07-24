@@ -5,6 +5,4 @@
 # app/pms/snmp_printer_service.py -- do not re-add FastAPI/SQLAlchemy here.
 pysnmp
 httpx
-beautifulsoup4
-urllib3
 pydantic
